@@ -30,15 +30,6 @@ export const getUser: RequestHandler = asyncHandler(async (req, res) => {
   });
 });
 
-export const createUser: RequestHandler = asyncHandler(async (req, res) => {
-  const user = await userService.createUser(req.body);
-
-  res.status(201).json({
-    status: 'success',
-    data: user,
-  });
-});
-
 export const updateUser: RequestHandler = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
 
