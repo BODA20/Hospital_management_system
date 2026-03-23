@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { validate } from '../../common/middleware/validate';
-import * as usersController from './user.controller';
+import * as usersController from './controllers/user.controller';
 import {
   createUserSchema,
-  updateUserSchema,
+  updateProfileSchema,
   userIdParamSchema,
 } from './users.validation';
 
@@ -21,20 +21,10 @@ router.get(
   validate(userIdParamSchema, 'params'),
   usersController.getUser,
 );
-
-// router.post(
-//   '/',
-//   restrictTo('admin'),
-//   validate(createUserSchema),
-//   usersController.createUser,
-// );
-
 router.patch(
-  '/:id',
-  restrictTo('admin'),
-  validate(userIdParamSchema, 'params'),
-  validate(updateUserSchema),
-  usersController.updateUser,
+  '/me',
+  validate(updateProfileSchema),
+  usersController.updateProfile,
 );
 
 router.delete(

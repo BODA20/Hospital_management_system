@@ -1,6 +1,6 @@
 import type { RequestHandler } from 'express';
-import * as userService from './user.service';
-import { asyncHandler } from '../../common/utils/asyncHandler';
+import * as userService from '../services/user.service';
+import { asyncHandler } from '../../../common/utils/asyncHandler';
 
 export const getUsers: RequestHandler = asyncHandler(async (_req, res) => {
   const users = await userService.getAllUsers();
@@ -30,21 +30,19 @@ export const getUser: RequestHandler = asyncHandler(async (req, res) => {
   });
 });
 
-export const updateUser: RequestHandler = asyncHandler(async (req, res) => {
-  const id = Number(req.params.id);
+export const updateProfile = asyncHandler(async (_req, res) => {
+  const userId = _req.user!.id;
 
-  const updated = await userService.updateUser(id, req.body);
+  const updateData = _req.body;
 
-  if (!updated) {
-    return res.status(404).json({
-      status: 'error',
-      message: 'User not found',
-    });
-  }
+  const updatedUser = await userService.updateProfile(
+    userId,
+    updateData as { name?: string; phone?: string },
+  );
 
   res.status(200).json({
     status: 'success',
-    data: updated,
+    data: updatedUser,
   });
 });
 

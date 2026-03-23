@@ -1,5 +1,10 @@
 export type UserRole = 'admin' | 'doctor' | 'nurse' | 'patient';
 
+export type UpdateProfileDTO = {
+  name?: string;
+  phone?: string;
+};
+
 export interface User {
   id: number;
   name: string;
@@ -17,4 +22,4 @@ export interface User {
 }
 
 export type PublicUser = Omit<User, 'password'>;
-export type NewUserInput = Pick<User, 'name' | 'email' | 'role' | 'password'>;
+export type NewUserInput = Pick<User, 'name' | 'email' | 'password'>;

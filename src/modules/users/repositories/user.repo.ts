@@ -1,5 +1,10 @@
-import db from '../../config/db';
-import type { PublicUser, NewUserInput, User } from './user.types';
+import db from '../../../config/db';
+import type {
+  PublicUser,
+  NewUserInput,
+  User,
+  UpdateProfileDTO,
+} from '../user.types';
 
 export const findAllUsers = async (): Promise<PublicUser[]> => {
   return db('users')
@@ -43,12 +48,20 @@ export const createUser = async (data: NewUserInput): Promise<PublicUser> => {
 
 export const updateUserById = async (
   id: number,
-  data: Partial<Omit<User, 'id' | 'password' | 'created_at'>>,
-): Promise<PublicUser> => {
-  const [user] = await db<User>('users')
+  data: Partial<UpdateProfileDTO>,
+): Promise<UpdateProfileDTO> => {
+  const allowedFields = ['name', 'phone'];
+  const filteredData = Object.keys(data)
+    .filter((key) => allowedFields.includes(key))
+    .reduce((obj, key) => {
+      obj[key as keyof UpdateProfileDTO] = data[key as keyof UpdateProfileDTO];
+      return obj;
+    }, {} as Partial<UpdateProfileDTO>);
+
+  const [user] = await db('users')
     .where({ id })
-    .update(data)
-    .returning(['id', 'name', 'email', 'role', 'is_active', 'created_at']);
+    .update(filteredData)
+    .returning(['id', 'name', 'role', 'email', 'is_active', 'created_at']);
 
   return user;
 };
@@ -60,43 +73,6 @@ export const deactivateUser = async (id: number): Promise<PublicUser> => {
     .returning(['id', 'name', 'email', 'role', 'is_active', 'created_at']);
 
   return user;
-};
-
-export const saveResetToken = async (
-  userId: number,
-  token: string,
-  expires: Date,
-): Promise<void> => {
-  await db('users')
-    .where({ id: userId })
-    .update({ password_reset_token: token, password_reset_expires: expires });
-};
-
-export const findByResetToken = async (
-  token: string,
-): Promise<User | undefined> => {
-  return db<User>('users')
-    .where({ password_reset_token: token })
-    .andWhere('password_reset_expires', '>', new Date())
-    .first();
-};
-
-export const UpdatePassword = async (
-  userId: number,
-  newPassword: string,
-): Promise<void> => {
-  await db('users').where({ id: userId }).update({
-    password: newPassword,
-    password_reset_token: null,
-    password_reset_expires: null,
-    password_change_at: new Date(),
-  });
-};
-
-export const ClearResetToken = async (userId: number): Promise<void> => {
-  await db('users')
-    .where({ id: userId })
-    .update({ password_reset_token: null, password_reset_expires: null });
 };
 
 export const saveEmailChangeToken = async (

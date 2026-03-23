@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { UserRole } from './user.types';
 
-const roles: UserRole[] = ['admin', 'doctor', 'nurse', 'patient'];
+// const roles: UserRole[] = ['admin', 'doctor', 'nurse', 'patient'];
 
 export const passwordSchema = z
   .string()
@@ -21,17 +21,13 @@ export const createUserSchema = z
       .max(100, 'Name is too long'),
     email: z.string().trim().toLowerCase().email('Invalid email'),
     password: passwordSchema,
-    role: z.enum(roles as [UserRole, ...UserRole[]]),
   })
   .strict();
 
-export const updateUserSchema = z
+export const updateProfileSchema = z
   .object({
     name: z.string().trim().min(2).max(100).optional(),
-    email: z.string().trim().toLowerCase().email().optional(),
-    role: z.enum(roles as [UserRole, ...UserRole[]]).optional(),
     is_active: z.boolean().optional(),
-    //hash password update for later when we implement auth module
   })
   .strict()
   .refine((obj) => Object.keys(obj).length > 0, {
@@ -46,5 +42,5 @@ export const userIdParamSchema = z
   .strict();
 
 export type CreateUserDTO = z.infer<typeof createUserSchema>;
-export type UpdateUserDTO = z.infer<typeof updateUserSchema>;
+export type UpdateProfileDTO = z.infer<typeof updateProfileSchema>;
 export type UserIdParamDTO = z.infer<typeof userIdParamSchema>;
