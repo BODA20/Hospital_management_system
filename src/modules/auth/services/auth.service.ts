@@ -155,7 +155,7 @@ export const requestChangeEmail = async (userId: number, newEmail: string) => {
   const expires = new Date();
   expires.setHours(expires.getHours() + 1);
 
-  await usersRepo.saveEmailChangeToken(userId, newEmail, hashedToken, expires);
+  await usersRepo.saveEmailChangeToken(userId, hashedToken, newEmail, expires);
 
   const verifyURL = `http://localhost:3000/api/users/verify-email/${token}`;
 
