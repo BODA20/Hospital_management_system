@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { appError } from '../errors/AppError';
-import * as usersRepo from '../../modules/users/user.repo';
+import * as usersRepo from '../../modules/users/repositories/user.repo';
 
 type JwtPayload = {
   id: number;
