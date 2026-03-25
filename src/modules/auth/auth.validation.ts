@@ -16,5 +16,12 @@ export const loginSchema = z
   })
   .strict();
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: passwordSchema,
+  })
+  .strict();
 export type SignupDTO = z.infer<typeof signupSchema>;
 export type LoginDTO = z.infer<typeof loginSchema>;
+export type ChangePasswordDTO = z.infer<typeof changePasswordSchema>;

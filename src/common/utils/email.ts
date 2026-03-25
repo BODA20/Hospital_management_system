@@ -12,10 +12,15 @@ export class Email {
   private from: string;
 
   constructor(user: UserEmail, url: string) {
+    if (!user || !user.email) {
+      throw new Error(
+        'Email address is required to initialize the Email service',
+      );
+    }
     this.to = user.email;
     this.firstName = (user.name || '').split(' ')[0] || 'User';
     this.url = url;
-    this.from = `Hospital System <${process.env.EMAIL_FROM}>`;
+    this.from = `Hospital System <${process.env.EMAIL_FROM || 'noreply@hospital.com'}>`;
   }
 
   private newTransport() {
