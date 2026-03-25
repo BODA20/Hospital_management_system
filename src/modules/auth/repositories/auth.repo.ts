@@ -37,3 +37,13 @@ export const ClearResetToken = async (userId: number): Promise<void> => {
     .where({ id: userId })
     .update({ password_reset_token: null, password_reset_expires: null });
 };
+
+export const changepassword = async (
+  userId: number,
+  newPassword: string,
+): Promise<void> => {
+  await db('users').where({ id: userId }).update({
+    password: newPassword,
+    password_change_at: new Date(),
+  });
+};

@@ -2,7 +2,12 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { appError } from '../../../common/errors/AppError';
 import type { PublicUser } from '../../users/user.types';
-import type { LoginDTO, SignupDTO } from '../auth.validation';
+import type {
+  ChangePasswordDTO,
+  LoginDTO,
+  SignupDTO,
+  changePasswordSchema,
+} from '../auth.validation';
 import * as usersRepo from '../../users/repositories/user.repo';
 import * as authRepo from '../repositories/auth.repo';
 import crypto from 'crypto';
@@ -50,16 +55,8 @@ export async function signup(dto: SignupDTO) {
     password: password_hash,
   });
 
-  const accessToken = signToken({
-    id: user.id,
-    role: user.role,
-  });
-
-  const { refreshToken } = await sessionService.createSession(user.id);
-
   return {
-    accessToken,
-    refreshToken,
+    message: 'User created successfully, please log in',
     user,
   };
 }
@@ -187,4 +184,31 @@ export async function logout(refreshToken: string) {
   await sessionService.revokeSession(refreshToken);
 
   return { message: 'Logged out successfully' };
+}
+
+export async function changePassword(userId: number, dto: ChangePasswordDTO) {
+  const user = await usersRepo.findUserWithPasswordById(userId);
+
+  if (!user) {
+    throw new appError('User not found', 404);
+  }
+
+  const ok = await bcrypt.compare(dto.currentPassword, user.password);
+
+  if (!ok) {
+    throw new appError('Current password is incorrect', 401);
+  }
+
+  if (dto.currentPassword === dto.newPassword) {
+    throw new appError('New password must be different', 400);
+  }
+
+  const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
+  const hashedPassword = await bcrypt.hash(dto.newPassword, rounds);
+
+  await authRepo.changepassword(userId, hashedPassword);
+
+  await sessionService.revokeAllUserSessions(userId);
+
+  return;
 }

@@ -21,6 +21,11 @@ export const findUserById = async (
     .first();
 };
 
+export async function findUserWithPasswordById(
+  id: number,
+): Promise<User | undefined> {
+  return db<User>('users').where({ id }).first();
+}
 export const findUserByEmail = async (
   email: string,
 ): Promise<User | undefined> => {

@@ -96,3 +96,17 @@ export const requestChangeEmail = asyncHandler(
     });
   },
 );
+
+export const changePassword = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const dto = req.body;
+
+    await authService.changePassword(userId, dto);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Password changed successfully, please login again',
+    });
+  },
+);
