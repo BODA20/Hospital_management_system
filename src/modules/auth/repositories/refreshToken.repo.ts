@@ -1,15 +1,7 @@
 import db from '../../../config/db';
-import type { RefreshTokenRecord } from '../auth.types';
+import type { RefreshTokenRecord, SessionCreateInput } from '../auth.types';
 
-interface CreateTokenInput {
-  user_id: number;
-  token_hash: string;
-  expires_at: Date;
-  user_agent?: string;
-  ip?: string;
-}
-
-export async function createToken(data: CreateTokenInput) {
+export async function createToken(data: SessionCreateInput) {
   const [token] = await db<RefreshTokenRecord>('refresh_tokens')
     .insert({
       user_id: data.user_id,
