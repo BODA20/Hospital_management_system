@@ -22,4 +22,8 @@ router.use(protect);
 
 router.patch('/change-email', authController.requestChangeEmail);
 
+router.post('/logout', authController.logout);
+
+router.patch('/change-password', authController.changePassword);
+
 export default router;

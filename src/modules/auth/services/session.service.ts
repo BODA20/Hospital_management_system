@@ -46,6 +46,13 @@ export async function rotateSession(oldToken: string) {
     throw new Error('Invalid refresh token');
   }
 
+  if (oldSession.revoked) {
+    throw new Error('Refresh token already used');
+  }
+
+  if (oldSession.expires_at < new Date()) {
+    throw new Error('Refresh token expired');
+  }
   const newToken = generateRefreshToken();
   const newHash = hashToken(newToken);
 
