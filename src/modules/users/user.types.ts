@@ -1,4 +1,9 @@
-export type UserRole = 'admin' | 'doctor' | 'nurse' | 'patient';
+export enum UserRole {
+  ADMIN = 'admin',
+  DOCTOR = 'doctor',
+  NURSE = 'nurse',
+  PATIENT = 'patient',
+}
 
 export type UpdateProfileDTO = {
   name?: string;
