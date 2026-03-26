@@ -14,8 +14,7 @@ function formatZod(err: ZodError) {
 export const validate =
   (schema: ZodSchema, where: Where = 'body'): RequestHandler =>
   (req, _res, next) => {
-    const result = schema.safeParse((req as any)[where]);
-
+    const result = schema.safeParse((req as any)[where] || {});
     if (!result.success) {
       const formattedErrors = formatZod(result.error);
       console.log('Zod Validation Errors:', formattedErrors);
