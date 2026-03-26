@@ -4,6 +4,7 @@ import type {
   NewUserInput,
   User,
   UpdateProfileDTO,
+  UserRole,
 } from '../user.types';
 
 export const findAllUsers = async (): Promise<PublicUser[]> => {
@@ -124,4 +125,11 @@ export const updateEmailChangeExpires = async (
   await db('users')
     .where({ id: userId })
     .update({ email_change_expires: expires });
+};
+
+export const updateUserRole = async (
+  userId: number,
+  role: UserRole,
+): Promise<void> => {
+  await db('users').where({ id: userId }).update({ role });
 };

@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import db from '../config/db';
-
+import { UserRole } from '../modules/users/user.types';
 export async function seedAdmin() {
   const existing = await db('users')
     .where({ email: 'bodaAdmin@system.com' })
@@ -17,7 +17,7 @@ export async function seedAdmin() {
     name: 'Boda Admin',
     email: 'bodadmin@system.com',
     password: hashed,
-    role: 'admin',
+    role: UserRole.ADMIN,
     is_active: true,
   });
 
