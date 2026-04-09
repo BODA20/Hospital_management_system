@@ -1,6 +1,6 @@
 import { appError } from '../../../common/errors/AppError';
 import * as userRepo from '../repositories/user.repo';
-import { UserRole } from '../user.types';
+// import { UserRole } from '../user.types';
 
 export const getAllUsers = async () => {
   return userRepo.findAllUsers();

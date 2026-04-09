@@ -22,6 +22,27 @@ export const changePasswordSchema = z
     newPassword: passwordSchema,
   })
   .strict();
+export const forgotPasswordSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email(),
+  })
+  .strict();
+
+export const resetPasswordSchema = z
+  .object({
+    password: passwordSchema,
+  })
+  .strict();
+
+export const changeEmailSchema = z
+  .object({
+    newEmail: z.string().trim().toLowerCase().email(),
+  })
+  .strict();
+
 export type SignupDTO = z.infer<typeof signupSchema>;
 export type LoginDTO = z.infer<typeof loginSchema>;
 export type ChangePasswordDTO = z.infer<typeof changePasswordSchema>;
+export type ForgotPasswordDTO = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordDTO = z.infer<typeof resetPasswordSchema>;
+export type ChangeEmailDTO = z.infer<typeof changeEmailSchema>;

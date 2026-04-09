@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import { validate } from '../../common/middleware/validate';
-import { loginSchema, signupSchema } from './auth.validation';
+import {
+  loginSchema,
+  signupSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  changeEmailSchema,
+  changePasswordSchema,
+} from './auth.validation';
 import * as authController from './controllers/auth.controller';
 import { protect } from '../../common/middleware/auth';
 
@@ -12,18 +19,34 @@ router.post('/login', validate(loginSchema), authController.login);
 
 router.post('/refresh', authController.refresh);
 
-router.post('/forgot-password', authController.forgotPassword);
+router.post(
+  '/forgot-password',
+  validate(forgotPasswordSchema),
+  authController.forgotPassword,
+);
 
-router.patch('/reset-password/:token', authController.resetPassword);
+router.patch(
+  '/reset-password/:token',
+  validate(resetPasswordSchema),
+  authController.resetPassword,
+);
 
 router.get('/verify-email/:token', authController.verifyNewEmail);
 
 router.use(protect);
 
-router.patch('/change-email', authController.requestChangeEmail);
+router.patch(
+  '/change-email',
+  validate(changeEmailSchema),
+  authController.requestChangeEmail,
+);
 
 router.post('/logout', authController.logout);
 
-router.patch('/change-password', authController.changePassword);
+router.patch(
+  '/change-password',
+  validate(changePasswordSchema),
+  authController.changePassword,
+);
 
 export default router;

@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
 import * as authService from '../services/auth.service';
 import { asyncHandler } from '../../../common/utils/asyncHandler';
+import {
+  ChangeEmailDTO,
+  ChangePasswordDTO,
+  ForgotPasswordDTO,
+  ResetPasswordDTO,
+} from '../auth.validation';
 
 export const signup = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.signup(req.body);
@@ -44,7 +50,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 
 export const forgotPassword = asyncHandler(
   async (req: Request, res: Response) => {
-    const { email } = req.body;
+    const { email } = req.body as ForgotPasswordDTO;
 
     const result = await authService.forgotPassword(email);
 
@@ -58,7 +64,7 @@ export const forgotPassword = asyncHandler(
 export const resetPassword = asyncHandler(
   async (req: Request, res: Response) => {
     const { token } = req.params;
-    const { password } = req.body;
+    const { password } = req.body as ResetPasswordDTO;
 
     await authService.resetPassword(token as string, password);
 
@@ -85,7 +91,7 @@ export const verifyNewEmail = asyncHandler(
 export const requestChangeEmail = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { newEmail } = req.body;
+    const { newEmail } = req.body as ChangeEmailDTO;
 
     await authService.requestChangeEmail(userId, newEmail);
 
@@ -100,7 +106,7 @@ export const requestChangeEmail = asyncHandler(
 export const changePassword = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const dto = req.body;
+    const dto = req.body as ChangePasswordDTO;
 
     await authService.changePassword(userId, dto);
 
