@@ -9,3 +9,5 @@ package-lock.json
 knexfile.ts
 
 tsconfig.json
+
+project_context.md
