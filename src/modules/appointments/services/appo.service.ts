@@ -1,18 +1,28 @@
 import * as appointmentsRepo from '../repositories/appo.repo';
 import * as doctorsRepo from '../../doctors/repositories/doctor.repo';
+import * as patientRepo from '../../patients/repositories/patient.repository';
 import { appError } from '../../../common/errors/AppError';
 
 // ─── Create Appointment ────────────────────────────────────────────────────────
 export const createAppointment = async (userId: number, body: any) => {
   const { doctor_id, starts_at, notes } = body;
 
+  // Find patient by userId (mapped from authenticated req.user.id)
+  const patient = await patientRepo.findByUserId(userId);
+  if (!patient) {
+    throw new appError(
+      'Patient profile not found. Please complete your registration.',
+      404,
+    );
+  }
+
   // Find doctor by their doctors.id (PK), not user_id
   const doctor = await doctorsRepo.findById(doctor_id);
   if (!doctor) throw new appError('Doctor not found', 404);
 
-  if (!doctor.is_available) {
-    throw new appError('This doctor is currently not available for bookings', 400);
-  }
+  // if (!doctor.is_available) {
+  //   throw new appError('This doctor is currently not available for bookings', 400);
+  // }
 
   const isAvailable = await appointmentsRepo.checkAvailability(doctor_id, starts_at);
   if (!isAvailable) {
@@ -23,7 +33,7 @@ export const createAppointment = async (userId: number, body: any) => {
   }
 
   return appointmentsRepo.createAppointment({
-    patient_id: userId,
+    patient_id: patient.id,
     doctor_id,
     starts_at,
     status: 'scheduled',
@@ -32,8 +42,11 @@ export const createAppointment = async (userId: number, body: any) => {
 };
 
 // ─── Get My Appointments (Patient) ────────────────────────────────────────────
-export const getMyAppointments = (userId: number) => {
-  return appointmentsRepo.getByPatient(userId);
+export const getMyAppointments = async (userId: number) => {
+  const patient = await patientRepo.findByUserId(userId);
+  if (!patient) return [];
+
+  return appointmentsRepo.getByPatient(patient.id);
 };
 
 // ─── Get All Doctor Appointments ──────────────────────────────────────────────
