@@ -5,6 +5,7 @@ import {
   createUserSchema,
   updateProfileSchema,
   userIdParamSchema,
+  adminUpdateUserSchema,
 } from './users.validation';
 
 import { protect, restrictTo } from '../../common/middleware/auth';
@@ -25,6 +26,14 @@ router.patch(
   '/me',
   validate(updateProfileSchema),
   usersController.updateProfile,
+);
+
+router.patch(
+  '/:id',
+  restrictTo('admin'),
+  validate(userIdParamSchema, 'params'),
+  validate(adminUpdateUserSchema),
+  usersController.adminUpdateUser,
 );
 
 router.delete(

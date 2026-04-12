@@ -6,14 +6,14 @@ export enum UserRole {
 }
 
 export type UpdateProfileDTO = {
-  name?: string;
-  phone?: string;
+  full_name?: string;
 };
 
 export interface User {
   id: number;
-  name: string;
+  full_name: string;
   email: string;
+  phone?: string | null;
   password: string;
   role: UserRole;
   is_active: boolean;
@@ -27,4 +27,4 @@ export interface User {
 }
 
 export type PublicUser = Omit<User, 'password'>;
-export type NewUserInput = Pick<User, 'name' | 'email' | 'password'>;
+export type NewUserInput = Pick<User, 'full_name' | 'email' | 'password'>;

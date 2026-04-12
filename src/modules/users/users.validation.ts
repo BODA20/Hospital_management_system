@@ -14,11 +14,11 @@ export const passwordSchema = z
 
 export const createUserSchema = z
   .object({
-    name: z
+    full_name: z
       .string()
       .trim()
-      .min(2, 'Name is too short')
-      .max(100, 'Name is too long'),
+      .min(2, 'Full name is too short')
+      .max(100, 'Full name is too long'),
     email: z.string().trim().toLowerCase().email('Invalid email'),
     password: passwordSchema,
   })
@@ -26,8 +26,22 @@ export const createUserSchema = z
 
 export const updateProfileSchema = z
   .object({
-    name: z.string().trim().min(2).max(100).optional(),
+    full_name: z.string().trim().min(2).max(100).optional(),
+  })
+  .strict()
+  .refine((obj) => Object.keys(obj).length > 0, {
+    message: 'At least one field must be provided',
+    path: ['_'],
+  });
+
+const roles = ['admin', 'doctor', 'nurse', 'patient'] as const;
+
+export const adminUpdateUserSchema = z
+  .object({
+    full_name: z.string().trim().min(2).max(100).optional(),
     is_active: z.boolean().optional(),
+    role: z.enum(roles).optional(),
+    specialization: z.string().trim().min(2).max(100).optional(),
   })
   .strict()
   .refine((obj) => Object.keys(obj).length > 0, {
@@ -44,3 +58,4 @@ export const userIdParamSchema = z
 export type CreateUserDTO = z.infer<typeof createUserSchema>;
 export type UpdateProfileDTO = z.infer<typeof updateProfileSchema>;
 export type UserIdParamDTO = z.infer<typeof userIdParamSchema>;
+export type AdminUpdateUserDTO = z.infer<typeof adminUpdateUserSchema>;

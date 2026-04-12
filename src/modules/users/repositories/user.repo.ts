@@ -1,4 +1,5 @@
 import db from '../../../config/db';
+import type { Knex } from 'knex';
 import type {
   PublicUser,
   NewUserInput,
@@ -9,15 +10,14 @@ import type {
 
 export const findAllUsers = async (): Promise<PublicUser[]> => {
   return db('users')
-    .select('id', 'name', 'email', 'role', 'is_active', 'created_at')
-    .where('is_active', true);
+    .select('id', 'full_name', 'email', 'phone', 'role', 'is_active', 'created_at');
 };
 
 export const findUserById = async (
   id: number,
 ): Promise<PublicUser | undefined> => {
   return db('users')
-    .select('id', 'name', 'email', 'role', 'is_active', 'created_at')
+    .select('id', 'full_name', 'email', 'phone', 'role', 'is_active', 'created_at')
     .where({ id })
     .first();
 };
@@ -33,8 +33,9 @@ export const findUserByEmail = async (
   return db<User>('users')
     .select(
       'id',
-      'name',
+      'full_name',
       'email',
+      'phone',
       'password',
       'role',
       'is_active',
@@ -44,10 +45,11 @@ export const findUserByEmail = async (
     .first();
 };
 
-export const createUser = async (data: NewUserInput): Promise<PublicUser> => {
-  const [user] = await db<User>('users')
+export const createUser = async (data: NewUserInput, trx?: Knex.Transaction): Promise<PublicUser> => {
+  const query = trx ? trx<User>('users') : db<User>('users');
+  const [user] = await query
     .insert(data)
-    .returning(['id', 'name', 'email', 'role', 'is_active', 'created_at']);
+    .returning(['id', 'full_name', 'email', 'phone', 'role', 'is_active', 'created_at']);
 
   return user;
 };
@@ -56,7 +58,7 @@ export const updateUserById = async (
   id: number,
   data: Partial<UpdateProfileDTO>,
 ): Promise<UpdateProfileDTO> => {
-  const allowedFields = ['name', 'phone'];
+  const allowedFields = ['full_name'];
   const filteredData = Object.keys(data)
     .filter((key) => allowedFields.includes(key))
     .reduce((obj, key) => {
@@ -67,7 +69,7 @@ export const updateUserById = async (
   const [user] = await db('users')
     .where({ id })
     .update(filteredData)
-    .returning(['id', 'name', 'role', 'email', 'is_active', 'created_at']);
+    .returning(['id', 'full_name', 'role', 'email', 'phone', 'is_active', 'created_at']);
 
   return user;
 };
@@ -76,7 +78,7 @@ export const deactivateUser = async (id: number): Promise<PublicUser> => {
   const [user] = await db<User>('users')
     .where({ id })
     .update({ is_active: false })
-    .returning(['id', 'name', 'email', 'role', 'is_active', 'created_at']);
+    .returning(['id', 'full_name', 'email', 'phone', 'role', 'is_active', 'created_at']);
 
   return user;
 };
@@ -132,4 +134,24 @@ export const updateUserRole = async (
   role: UserRole,
 ): Promise<void> => {
   await db('users').where({ id: userId }).update({ role });
+};
+
+export const adminUpdateUser = async (
+  id: number,
+  data: { full_name?: string; role?: string; is_active?: boolean },
+  trx?: Knex.Transaction
+): Promise<PublicUser> => {
+  const filteredData: Partial<User> = {};
+  if (data.full_name !== undefined) filteredData.full_name = data.full_name;
+  if (data.role !== undefined) filteredData.role = data.role as UserRole;
+  if (data.is_active !== undefined) filteredData.is_active = data.is_active;
+
+  const query = trx ? trx('users') : db('users');
+
+  const [user] = await query
+    .where({ id })
+    .update(filteredData)
+    .returning(['id', 'full_name', 'email', 'phone', 'role', 'is_active', 'created_at']);
+
+  return user;
 };
