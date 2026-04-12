@@ -1,8 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import { errorHandler } from './src/common/middleware/errorHandler';
 import usersRoutes from './src/modules/users/routes';
 import authRoutes from './src/modules/auth/auth.routes';
-import dotenv from 'dotenv';
 import { staffRequestRouter } from './src/modules/sttaf_request/staff_request.routes';
 import { doctorsRouter } from './src/modules/doctors/doctors.routes';
 import { appointmentsRouter } from './src/modules/appointments/appo.routes';
@@ -11,9 +11,14 @@ import { nursesRouter } from './src/modules/nurses/nurses.routes';
 import { patientsRouter } from './src/modules/patients/patients.routes';
 import { visitsRouter } from './src/modules/visits/visits.routes';
 import { dashboardRouter } from './src/modules/dashboard/dashboard.routes';
+import { billingRouter } from './src/modules/billing/billing.routes';
+import { stripeWebhookRouter } from './src/modules/billing/stripe.webhook.routes';
 
-dotenv.config();
 export const app = express();
+
+// Stripe webhook requires raw body payload to verify signatures securely.
+// We mount this strictly *before* express.json() to prevent body mutation.
+app.use('/api/v1/billing/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
 app.use(express.json());
 
@@ -30,6 +35,7 @@ app.use('/api/v1/nurses', nursesRouter);
 app.use('/api/v1/patients', patientsRouter);
 app.use('/api/v1/visits', visitsRouter);
 app.use('/api/v1/dashboard', dashboardRouter);
+app.use('/api/v1/billing/invoices', billingRouter);
 
 // ─── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((_req, res) => {

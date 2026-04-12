@@ -11,3 +11,5 @@ knexfile.ts
 tsconfig.json
 
 project_context.md
+
+stripe.exe
