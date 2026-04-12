@@ -1,6 +1,10 @@
 import * as staffRepo from '../repositories/staff_request.repo';
 import { appError } from '../../../common/errors/AppError';
 import * as usersRepo from '../../users/repositories/user.repo';
+import * as doctorRepo from '../../doctors/repositories/doctor.repo';
+import * as nurseRepo from '../../nurses/repositories/nurse.repository';
+import * as patientRepo from '../../patients/repositories/patient.repository';
+import db from '../../../config/db';
 
 export const getStaffRequest = async (userId: number) => {
   const request = await staffRepo.getAllPending();
@@ -36,17 +40,59 @@ export const approveRequest = async (requestId: number, adminId: number) => {
     throw new appError('Request already processed', 400);
   }
 
-  // 1. update request
-  await staffRepo.updateStatus(requestId, {
-    status: 'approved',
-    approved_by: adminId,
-    approved_at: new Date(),
-  });
+  try {
+    return await db.transaction(async (trx) => {
+      // 1. update request
+      await staffRepo.updateStatus(requestId, {
+        status: 'approved',
+        approved_by: adminId,
+        approved_at: new Date(),
+      }, trx);
 
-  // 2. update user role
-  await usersRepo.updateUserRole(request.user_id, request.requested_role);
+      // 2. update user role and activate
+      await usersRepo.adminUpdateUser(request.user_id, {
+        role: request.requested_role,
+        is_active: true
+      }, trx);
 
-  return { message: 'Request approved successfully' };
+      // 3. Conditional auto-provisioning
+      if (request.requested_role === 'doctor') {
+        const existingDoc = await doctorRepo.findByUserId(request.user_id, trx);
+        if (!existingDoc) {
+          await doctorRepo.createDoctor({
+            user_id: request.user_id,
+            specialization: 'General',
+            consultation_fee: 0,
+            experience_years: 0,
+            bio: '',
+          }, trx);
+        }
+      } else if (request.requested_role === 'nurse') {
+        const existingNurse = await nurseRepo.findByUserId(request.user_id, trx);
+        if (!existingNurse) {
+          const defaultDept = await trx('departments').first('id');
+          const defaultDoc = await trx('doctors').first('id');
+          
+          await nurseRepo.createNurse({
+            user_id: request.user_id,
+            department_id: defaultDept ? defaultDept.id : 1,
+            doctor_id: defaultDoc ? defaultDoc.id : 1,
+            license_number: 'PENDING-' + request.user_id,
+            shift: 'morning',
+            years_of_experience: 0,
+            notes: '',
+          }, trx);
+        }
+      }
+
+      // 4. Delete from patients table to prevent duplicate roles Data
+      await patientRepo.deleteByUserId(request.user_id, trx);
+
+      return { message: 'Request approved successfully' };
+    });
+  } catch (error: any) {
+    throw new appError(error.message || 'Failed to provision staff profile', 500);
+  }
 };
 
 export const rejectRequest = async (

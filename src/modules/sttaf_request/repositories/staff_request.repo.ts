@@ -1,8 +1,13 @@
 import db from '../../../config/db';
+import type { Knex } from 'knex';
 
 export const createRequest = async (data: {
   user_id: number;
   requested_role: string;
+  specialization?: string;
+  consultation_fee?: number;
+  experience_years?: number;
+  bio?: string;
 }) => {
   const [request] = await db('staff_requests')
     .insert({
@@ -12,6 +17,11 @@ export const createRequest = async (data: {
     .returning('*');
 
   return request;
+};
+
+export const findById = async (id: number, trx?: Knex.Transaction) => {
+  const query = trx ? trx('staff_requests') : db('staff_requests');
+  return query.where({ id }).first();
 };
 
 export const findByUserId = async (userId: number) => {
@@ -26,17 +36,15 @@ export const updateStatus = async (
     approved_at: Date;
     rejection_reason: string;
   }>,
+  trx?: Knex.Transaction
 ) => {
-  const [updated] = await db('staff_requests')
+  const query = trx ? trx('staff_requests') : db('staff_requests');
+  const [updated] = await query
     .where({ id })
     .update(data)
     .returning('*');
 
   return updated;
-};
-
-export const findById = async (id: number) => {
-  return db('staff_requests').where({ id }).first();
 };
 
 export const getAllPending = () => {
