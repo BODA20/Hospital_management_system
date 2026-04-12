@@ -1,6 +1,7 @@
 import { faker } from '@faker-js/faker';
 import bcrypt from 'bcrypt';
 import db from '../config/db';
+import { UserRole } from '../modules/users/user.types';
 
 export async function seedUsers() {
   const users = [];
@@ -9,11 +10,11 @@ export async function seedUsers() {
     const password = await bcrypt.hash('User123!', 12);
 
     users.push({
-      name: faker.person.fullName(),
+      full_name: faker.person.fullName(),
       email: faker.internet.email().toLowerCase(),
       password,
       is_active: true,
-      role: faker.helpers.arrayElement(['patient']),
+      role: faker.helpers.arrayElement([UserRole.PATIENT]),
     });
   }
 

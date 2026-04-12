@@ -14,7 +14,7 @@ export async function seedAdmin() {
   const hashed = await bcrypt.hash('Admin123!', 12);
 
   await db('users').insert({
-    name: 'Boda Admin',
+    full_name: 'Boda Admin',
     email: 'bodadmin@system.com',
     password: hashed,
     role: UserRole.ADMIN,
