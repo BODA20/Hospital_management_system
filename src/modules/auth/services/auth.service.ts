@@ -13,6 +13,8 @@ import * as authRepo from '../repositories/auth.repo';
 import crypto from 'crypto';
 import { Email } from '../../../common/utils/email';
 import * as sessionService from './session.service';
+import db from '../../../config/db';
+import * as patientRepo from '../../patients/repositories/patient.repository';
 
 function signToken(payload: { id: number; role: string }) {
   const secret = process.env.JWT_SECRET as string;
@@ -46,13 +48,17 @@ export async function signup(dto: SignupDTO) {
   if (existing) throw new appError('Email already in use', 409);
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
-
   const password_hash = await bcrypt.hash(dto.password, rounds);
 
-  const user = await usersRepo.createUser({
-    name: dto.name,
-    email: dto.email,
-    password: password_hash,
+  const user = await db.transaction(async (trx) => {
+    const newUser = await usersRepo.createUser({
+      full_name: dto.full_name,
+      email: dto.email,
+      password: password_hash,
+    }, trx);
+
+    await patientRepo.createBasePatient(newUser.id, trx);
+    return newUser;
   });
 
   return {
@@ -83,7 +89,7 @@ export async function login(
 
   const publicUser: PublicUser = {
     id: user.id,
-    name: user.name,
+    full_name: user.full_name,
     email: user.email,
     role: user.role,
     is_active: user.is_active,
@@ -118,7 +124,7 @@ export const forgotPassword = async (email: string) => {
   const resetURL = `${process.env.APP_URL}/reset-password/${resetToken}`;
 
   await new Email(
-    { email: user.email, name: user.name },
+    { email: user.email, name: user.full_name },
     resetURL,
   ).sendPasswordReset();
 
