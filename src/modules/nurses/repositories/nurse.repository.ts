@@ -36,8 +36,9 @@ export const createNurse = async (data: {
   shift: 'morning' | 'evening' | 'night';
   years_of_experience?: number;
   notes?: string;
-}) => {
-  const [nurse] = await db('nurses').insert(data).returning('*');
+}, trx?: import('knex').Knex.Transaction) => {
+  const query = trx ? trx('nurses') : db('nurses');
+  const [nurse] = await query.insert(data).returning('*');
   return nurse;
 };
 
@@ -66,9 +67,9 @@ export const findById = async (id: number) => {
   return nurseWithDetails().where('n.id', id).first();
 };
 
-// ─── Find Nurse by user_id ────────────────────────────────────────────────────
-export const findByUserId = async (userId: number) => {
-  return db('nurses').where({ user_id: userId }).first();
+export const findByUserId = async (userId: number, trx?: import('knex').Knex.Transaction) => {
+  const query = trx ? trx('nurses') : db('nurses');
+  return query.where({ user_id: userId }).first();
 };
 
 // ─── Update Nurse ──────────────────────────────────────────────────────────────

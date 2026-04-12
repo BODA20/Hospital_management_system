@@ -1,4 +1,5 @@
 import db from '../../../config/db';
+import type { Knex } from 'knex';
 import type {
   CreatePatientInput,
   UpdatePatientInput,
@@ -50,6 +51,19 @@ export const createPatient = async (data: CreatePatientInput) => {
     .returning('*');
 
   return patient;
+};
+
+// ─── Create Base Patient ───────────────────────────────────────────────────────
+export const createBasePatient = async (userId: number, trx?: Knex.Transaction) => {
+  const query = trx ? trx('patients') : db('patients');
+  const [patient] = await query.insert({ user_id: userId }).returning('*');
+  return patient;
+};
+
+// ─── Delete By User ID ─────────────────────────────────────────────────────────
+export const deleteByUserId = async (userId: number, trx?: Knex.Transaction) => {
+  const query = trx ? trx('patients') : db('patients');
+  return query.where({ user_id: userId }).delete();
 };
 
 // ─── Find All with Pagination + Search ────────────────────────────────────────
