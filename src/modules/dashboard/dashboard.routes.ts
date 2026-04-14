@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { protect, restrictTo } from '../../common/middleware/auth';
+import { validateQuery } from '../../common/middleware/validateQuery';
+import { statsQuerySchema } from './dashboard.validation';
 import * as dashboardController from './controllers/dashboard.controller';
 
 export const dashboardRouter = Router();
@@ -9,3 +11,10 @@ dashboardRouter.use(protect, restrictTo('admin'));
 
 // GET /api/v1/dashboard/admin-summary
 dashboardRouter.get('/admin-summary', dashboardController.getAdminSummary);
+
+// GET /api/v1/dashboard/stats?period=week  OR  ?startDate=...&endDate=...
+dashboardRouter.get(
+  '/stats',
+  validateQuery(statsQuerySchema),
+  dashboardController.getStats,
+);
