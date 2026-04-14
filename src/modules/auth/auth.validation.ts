@@ -34,6 +34,12 @@ export const resetPasswordSchema = z
   })
   .strict();
 
+export const refreshSchema = z
+  .object({
+    refreshToken: z.string().min(1, 'Refresh token is required'),
+  })
+  .strict();
+
 export const changeEmailSchema = z
   .object({
     newEmail: z.string().trim().toLowerCase().email(),
@@ -44,5 +50,6 @@ export type SignupDTO = z.infer<typeof signupSchema>;
 export type LoginDTO = z.infer<typeof loginSchema>;
 export type ChangePasswordDTO = z.infer<typeof changePasswordSchema>;
 export type ForgotPasswordDTO = z.infer<typeof forgotPasswordSchema>;
+export type RefreshDTO = z.infer<typeof refreshSchema>;
 export type ResetPasswordDTO = z.infer<typeof resetPasswordSchema>;
 export type ChangeEmailDTO = z.infer<typeof changeEmailSchema>;

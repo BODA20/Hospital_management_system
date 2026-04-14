@@ -29,6 +29,10 @@ function signToken(payload: { id: number; role: string }) {
 }
 
 export async function refresh(refreshToken: string) {
+  if (!refreshToken) {
+    throw new appError('Refresh token is required', 400);
+  }
+
   const { userId, refreshToken: newToken } =
     await sessionService.rotateSession(refreshToken);
 
@@ -187,6 +191,10 @@ export const verifyNewEmail = async (token: string) => {
 };
 
 export async function logout(refreshToken: string) {
+  if (!refreshToken) {
+    throw new appError('Refresh token is required', 400);
+  }
+
   await sessionService.revokeSession(refreshToken);
 
   return { message: 'Logged out successfully' };

@@ -7,6 +7,7 @@ import {
   resetPasswordSchema,
   changeEmailSchema,
   changePasswordSchema,
+  refreshSchema,
 } from './auth.validation';
 import * as authController from './controllers/auth.controller';
 import { protect } from '../../common/middleware/auth';
@@ -17,7 +18,7 @@ router.post('/signup', validate(signupSchema), authController.signup);
 
 router.post('/login', validate(loginSchema), authController.login);
 
-router.post('/refresh', authController.refresh);
+router.post('/refresh', validate(refreshSchema), authController.refresh);
 
 router.post(
   '/forgot-password',

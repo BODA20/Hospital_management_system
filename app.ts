@@ -21,6 +21,7 @@ export const app = express();
 app.use('/api/v1/billing/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
