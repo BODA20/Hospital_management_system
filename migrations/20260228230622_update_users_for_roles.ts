@@ -18,11 +18,14 @@ export async function up(knex: Knex): Promise<void> {
 }
 
 export async function down(knex: Knex): Promise<void> {
+  const exists = await knex.schema.hasColumn('users', 'staff_status');
   await knex.schema.alterTable('users', (table) => {
     table.dropColumn('approved_by');
     table.dropColumn('approved_at');
-    table.dropColumn('staff_status');
     table.dropColumn('requested_role');
+     if (exists) {
+      table.dropColumn('staff_status');
+    }
     table.dropColumn('role');
   });
 }
