@@ -14,7 +14,7 @@ export interface User {
   full_name: string;
   email: string;
   phone?: string | null;
-  password: string;
+  password_hash: string;
   role: UserRole;
   is_active: boolean;
   created_at: Date;
@@ -26,5 +26,5 @@ export interface User {
   password_change_at?: Date | null;
 }
 
-export type PublicUser = Omit<User, 'password'>;
-export type NewUserInput = Pick<User, 'full_name' | 'email' | 'password'>;
+export type PublicUser = Omit<User, 'password_hash'>;
+export type NewUserInput = Pick<User, 'full_name' | 'email' | 'password_hash'>;
