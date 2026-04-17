@@ -50,7 +50,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {
-    console.error('🔥 ERROR:', err);
+    // console.error('🔥 ERROR:', err);
   }
 
   // ─── PostgreSQL: Unique Constraint Violation (23505) ──────────────────────────

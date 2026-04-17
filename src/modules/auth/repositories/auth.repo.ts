@@ -25,7 +25,7 @@ export const UpdatePassword = async (
   newPassword: string,
 ): Promise<void> => {
   await db('users').where({ id: userId }).update({
-    password: newPassword,
+    password_hash: newPassword,
     password_reset_token: null,
     password_reset_expires: null,
     password_change_at: new Date(),
@@ -43,7 +43,7 @@ export const changepassword = async (
   newPassword: string,
 ): Promise<void> => {
   await db('users').where({ id: userId }).update({
-    password: newPassword,
+    password_hash: newPassword,
     password_change_at: new Date(),
   });
 };
