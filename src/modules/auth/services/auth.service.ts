@@ -58,7 +58,7 @@ export async function signup(dto: SignupDTO) {
     const newUser = await usersRepo.createUser({
       full_name: dto.full_name,
       email: dto.email,
-      password: password_hash,
+      password_hash,
     }, trx);
 
     await patientRepo.createBasePatient(newUser.id, trx);
@@ -80,7 +80,7 @@ export async function login(
 
   if (!user.is_active) throw new appError('Account is deactivated', 403);
 
-  const ok = await bcrypt.compare(dto.password, user.password);
+  const ok = await bcrypt.compare(dto.password, user.password_hash);
 
   if (!ok) throw new appError('Invalid email or password', 401);
 
@@ -207,7 +207,7 @@ export async function changePassword(userId: number, dto: ChangePasswordDTO) {
     throw new appError('User not found', 404);
   }
 
-  const ok = await bcrypt.compare(dto.currentPassword, user.password);
+  const ok = await bcrypt.compare(dto.currentPassword, user.password_hash);
 
   if (!ok) {
     throw new appError('Current password is incorrect', 401);
