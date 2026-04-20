@@ -7,6 +7,7 @@ export enum UserRole {
 
 export type UpdateProfileDTO = {
   full_name?: string;
+  phone?: string | null;
 };
 
 export interface User {

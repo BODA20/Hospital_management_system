@@ -57,20 +57,31 @@ export const createUser = async (data: NewUserInput, trx?: Knex.Transaction): Pr
 export const updateUserById = async (
   id: number,
   data: Partial<UpdateProfileDTO>,
-): Promise<UpdateProfileDTO> => {
-  const allowedFields = ['full_name'];
+  trx?: Knex.Transaction, // البراميتر التالت تمام
+): Promise<any> => { // خليناها any مؤقتاً عشان الـ Returning
+  
+  // 1. ضيف الـ phone هنا عشان يتعدل
+  const allowedFields = ['full_name', 'phone']; 
+  
   const filteredData = Object.keys(data)
     .filter((key) => allowedFields.includes(key))
     .reduce((obj, key) => {
       obj[key as keyof UpdateProfileDTO] = data[key as keyof UpdateProfileDTO];
       return obj;
-    }, {} as Partial<UpdateProfileDTO>);
+    }, {} as any);
 
-  const [user] = await db('users')
+  // 2. استخدم الـ Query Builder بذكاء مع الـ trx
+  const query = db('users')
     .where({ id })
     .update(filteredData)
     .returning(['id', 'full_name', 'role', 'email', 'phone', 'is_active', 'created_at']);
 
+  // 3. دي أهم حتة: اربط الاستعلام بالـ Transaction لو موجودة
+  if (trx) {
+    query.transacting(trx);
+  }
+
+  const [user] = await query;
   return user;
 };
 
