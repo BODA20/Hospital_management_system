@@ -63,7 +63,7 @@ export const approveRequest = async (requestId: number, adminId: number) => {
             user_id: request.user_id,
             specialization: 'General',
             consultation_fee: 0,
-            experience_years: 0,
+            years_of_experience: 0,
             bio: '',
           }, trx);
         }
@@ -117,3 +117,4 @@ export const rejectRequest = async (
 
   return { message: 'Request rejected' };
 };
+
