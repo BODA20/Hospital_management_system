@@ -2,11 +2,6 @@ import { Request, Response } from 'express';
 import * as visitService from '../services/visit.service';
 import { asyncHandler } from '../../../common/utils/asyncHandler';
 
-// Authenticated user shape (set by protect middleware)
-interface AuthRequest extends Request {
-  user: { id: number; role: string };
-}
-
 // ─── Create Visit ──────────────────────────────────────────────────────────────
 export const createVisit = asyncHandler(async (req: Request, res: Response) => {
   const visit = await visitService.createVisit(req.body);
@@ -37,8 +32,7 @@ export const getPatientHistory = asyncHandler(
 
 // ─── Get My Visits (logged-in doctor) ─────────────────────────────────────────
 export const getMyVisits = asyncHandler(async (req: Request, res: Response) => {
-  const { id } = (req as AuthRequest).user;
-  const result = await visitService.getDoctorVisits(id);
+  const result = await visitService.getDoctorVisits(req.user.id);
   res.json({ status: 'success', data: result });
 });
 
@@ -59,18 +53,15 @@ export const deleteVisit = asyncHandler(async (req: Request, res: Response) => {
 
 // ─── Record Vitals (nurse action) ─────────────────────────────────────────────
 export const recordVitals = asyncHandler(async (req: Request, res: Response) => {
-  const { id: nurseUserId } = (req as AuthRequest).user;
   const visitId = Number(req.params.id);
   const { vitals } = req.body;
 
-  const visit = await visitService.recordVitals(visitId, vitals, nurseUserId);
+  const visit = await visitService.recordVitals(visitId, vitals, req.user.id);
   res.json({ status: 'success', data: visit });
 });
 
 // ─── Get Pending Visits Dashboard (doctor) ────────────────────────────────────
 export const getPendingVisits = asyncHandler(async (req: Request, res: Response) => {
-  const { id: doctorUserId } = (req as AuthRequest).user;
-  const result = await visitService.getPendingVisits(doctorUserId);
+  const result = await visitService.getPendingVisits(req.user.id);
   res.json({ status: 'success', data: result });
 });
-

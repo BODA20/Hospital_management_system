@@ -1,5 +1,6 @@
 import db from '../../../config/db';
 import type { CreateVisitInput, UpdateVisitInput } from '../visit.types';
+import type { Knex } from 'knex';
 
 // ─── Shared enriched select ────────────────────────────────────────────────────
 // Joins patients → users (patient name), doctors → users (doctor name), departments.
@@ -82,7 +83,8 @@ export const getVisitsByDoctor = async (doctorId: number) => {
 };
 
 // ─── Update Visit ──────────────────────────────────────────────────────────────
-export const updateVisit = async (id: number, data: UpdateVisitInput) => {
+export const updateVisit = async (id: number, data: UpdateVisitInput, trx?: Knex.Transaction) => {
+  const query = trx ? trx('visits') : db('visits');
   const updatePayload: Record<string, any> = {
     ...data,
     updated_at: db.fn.now(),
@@ -93,7 +95,7 @@ export const updateVisit = async (id: number, data: UpdateVisitInput) => {
     updatePayload.vitals = JSON.stringify(data.vitals);
   }
 
-  const [updated] = await db('visits')
+  const [updated] = await query
     .where({ id })
     .update(updatePayload)
     .returning('*');

@@ -1,3 +1,4 @@
+import db from '../../../config/db';
 import * as visitRepo from '../repositories/visit.repository';
 import * as doctorRepo from '../../doctors/repositories/doctor.repo';
 import * as patientRepo from '../../patients/repositories/patient.repository';
@@ -131,20 +132,32 @@ export const updateVisit = async (id: number, body: UpdateVisitInput) => {
     updateData.check_out_at = new Date().toISOString();
   }
 
-  await visitRepo.updateVisit(id, updateData);
-
-  // Automatic Invoice Generation when marking completed
+  // ─── Atomicity Fix: Wrap completion in transaction ────────────────────────
   if (visit.status !== 'completed' && body.status === 'completed') {
-    const doctor = await doctorRepo.findById(visit.doctor_id);
-    const consultation_fee = doctor ? Number(doctor.consultation_fee) || 0 : 0;
-    
-    await billingService.createInitialInvoice(
-      id,
-      visit.patient_id,
-      consultation_fee,
-    );
+    return await db.transaction(async (trx) => {
+      // 1. Update visit status
+      const updatedVisit = await visitRepo.updateVisit(id, updateData, trx);
+
+      // 2. Fetch doctor for fee
+      const doctor = await doctorRepo.findById(visit.doctor_id, trx);
+      const consultation_fee = doctor
+        ? Number(doctor.consultation_fee) || 0
+        : 0;
+
+      // 3. Create invoice
+      await billingService.createInitialInvoice(
+        id,
+        visit.patient_id,
+        consultation_fee,
+        trx,
+      );
+
+      return visitRepo.getVisitDetails(id);
+    });
   }
 
+  // Regular update (non-completion)
+  await visitRepo.updateVisit(id, updateData);
   return visitRepo.getVisitDetails(id);
 };
 
