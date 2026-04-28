@@ -2,6 +2,7 @@ import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { appError } from '../errors/AppError';
 import * as usersRepo from '../../modules/users/repositories/user.repo';
+import { getCachedUser, setCachedUser } from '../utils/userCache';
 
 type JwtPayload = {
   id: number;
@@ -9,14 +10,6 @@ type JwtPayload = {
   iat: number;
   exp: number;
 };
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: { id: number; role: string };
-    }
-  }
-}
 
 export const protect: RequestHandler = async (req, _res, next) => {
   try {
@@ -27,22 +20,45 @@ export const protect: RequestHandler = async (req, _res, next) => {
 
     const token = auth.split(' ')[1];
     const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error('JWT_SECRET is missing from .env');
+    if (!secret) throw new Error('JWT_SECRET is missing from environment');
 
     const decoded = jwt.verify(token, secret) as JwtPayload;
 
-    const user = await usersRepo.findUserById(decoded.id);
+    // ── Cache-first lookup: avoids a DB round-trip on every request ───────────
+    let cached = getCachedUser(decoded.id);
 
-    if (!user) {
-      return next(
-        new appError('The user belonging to this token no longer exists', 401),
-      );
+    if (!cached) {
+      // Cache miss — fetch minimal auth fields from DB and populate cache
+      const dbUser = await usersRepo.findUserForAuth(decoded.id);
+
+      if (!dbUser) {
+        return next(
+          new appError('The user belonging to this token no longer exists', 401),
+        );
+      }
+
+      setCachedUser({
+        id: dbUser.id,
+        role: dbUser.role,
+        is_active: dbUser.is_active,
+        password_change_at: dbUser.password_change_at,
+      });
+
+      cached = getCachedUser(decoded.id)!;
     }
-    if (user.password_change_at) {
-      const changedTimestamp = Math.floor(
-        user.password_change_at.getTime() / 1000,
-      );
 
+    // ── Security checks using cached data ──────────────────────────────────────
+
+    // 1. Account must be active
+    if (!cached.is_active) {
+      return next(new appError('This account is deactivated', 403));
+    }
+
+    // 2. Token must have been issued AFTER the last password change
+    if (cached.password_change_at) {
+      const changedTimestamp = Math.floor(
+        new Date(cached.password_change_at).getTime() / 1000,
+      );
       if (decoded.iat < changedTimestamp) {
         return next(
           new appError(
@@ -53,13 +69,9 @@ export const protect: RequestHandler = async (req, _res, next) => {
       }
     }
 
-    if (!user.is_active) {
-      return next(new appError('This account is deactivated', 403));
-    }
-
-    req.user = {
-      id: user.id,
-      role: user.role,
+    (req as any).user = {
+      id: cached.id,
+      role: cached.role,
     };
 
     next();
@@ -70,7 +82,7 @@ export const protect: RequestHandler = async (req, _res, next) => {
 
 export const restrictTo = (...roles: string[]): RequestHandler => {
   return (req, _res, next) => {
-    const userRole = req.user?.role;
+    const userRole = (req as any).user?.role;
 
     if (!userRole || !roles.includes(userRole)) {
       return next(
@@ -81,3 +93,4 @@ export const restrictTo = (...roles: string[]): RequestHandler => {
     next();
   };
 };
+
