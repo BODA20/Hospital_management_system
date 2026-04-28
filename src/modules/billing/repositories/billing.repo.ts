@@ -1,25 +1,14 @@
 import db from '../../../config/db';
-import type { Invoice, InvoiceItem, CreateInvoiceInput, AddInvoiceItemInput } from '../billing.types';
+import type { Invoice, InvoiceItem, AddInvoiceItemInput } from '../billing.types';
 import type { Knex } from 'knex';
 
 const generateInvoiceNo = async (trx: Knex.Transaction): Promise<string> => {
   const currentYear = new Date().getFullYear();
   const prefix = `INV-${currentYear}-`;
 
-  // Find the max invoice_no for this year to increment correctly.
-  const result = await trx('invoices')
-    .where('invoice_no', 'like', `${prefix}%`)
-    .max('invoice_no as max_no')
-    .first();
-
-  let nextNumber = 1;
-  if (result && result.max_no) {
-    const rawMax: string = result.max_no;
-    const parts = rawMax.split('-');
-    if (parts.length === 3) {
-      nextNumber = parseInt(parts[2], 10) + 1;
-    }
-  }
+  // ─── Concurrency Fix: Use PostgreSQL SEQUENCE ────────────────────────────────
+  const result = await trx.raw("SELECT nextval('invoice_num_seq') as next_val");
+  const nextNumber = result.rows[0].next_val;
 
   const paddedNumber = String(nextNumber).padStart(3, '0');
   return `${prefix}${paddedNumber}`;
@@ -29,11 +18,12 @@ export const createInitialInvoice = async (
   visit_id: number,
   patient_id: number,
   consultation_fee: number,
+  trx?: Knex.Transaction,
 ) => {
-  return await db.transaction(async (trx) => {
-    const invoice_no = await generateInvoiceNo(trx);
+  const work = async (t: Knex.Transaction) => {
+    const invoice_no = await generateInvoiceNo(t);
 
-    const [invoice] = await trx<Invoice>('invoices')
+    const [invoice] = await t<Invoice>('invoices')
       .insert({
         invoice_no,
         patient_id,
@@ -47,7 +37,7 @@ export const createInitialInvoice = async (
       .returning('*');
 
     if (consultation_fee > 0) {
-      await trx<InvoiceItem>('invoice_items').insert({
+      await t<InvoiceItem>('invoice_items').insert({
         invoice_id: invoice.id,
         description: 'Consultation Fee',
         quantity: 1,
@@ -57,7 +47,10 @@ export const createInitialInvoice = async (
     }
 
     return invoice;
-  });
+  };
+
+  if (trx) return work(trx);
+  return await db.transaction(work);
 };
 
 export const getInvoiceById = async (id: number) => {
@@ -75,10 +68,11 @@ export const getInvoiceWithItems = async (id: number) => {
 export const addInvoiceItem = async (
   invoice_id: number,
   itemData: AddInvoiceItemInput,
+  trx?: Knex.Transaction,
 ) => {
-  return await db.transaction(async (trx) => {
+  const work = async (t: Knex.Transaction) => {
     // 1. Lock the invoice row to prevent race conditions during calculation
-    const invoice = await trx<Invoice>('invoices')
+    const invoice = await t<Invoice>('invoices')
       .where({ id: invoice_id })
       .forUpdate()
       .first();
@@ -90,7 +84,7 @@ export const addInvoiceItem = async (
 
     // 2. Insert the item
     const line_total = itemData.quantity * itemData.unit_price;
-    const [newItem] = await trx<InvoiceItem>('invoice_items')
+    const [newItem] = await t<InvoiceItem>('invoice_items')
       .insert({
         invoice_id,
         description: itemData.description,
@@ -102,9 +96,10 @@ export const addInvoiceItem = async (
 
     // 3. Update the invoice totals
     const newTotalAmount = Number(invoice.total_amount) + line_total;
-    const newFinalAmount = newTotalAmount - Number(invoice.discount) + Number(invoice.tax);
+    const newFinalAmount =
+      newTotalAmount - Number(invoice.discount) + Number(invoice.tax);
 
-    const [updatedInvoice] = await trx<Invoice>('invoices')
+    const [updatedInvoice] = await t<Invoice>('invoices')
       .where({ id: invoice_id })
       .update({
         total_amount: newTotalAmount,
@@ -114,7 +109,10 @@ export const addInvoiceItem = async (
       .returning('*');
 
     return { invoice: updatedInvoice, item: newItem };
-  });
+  };
+
+  if (trx) return work(trx);
+  return await db.transaction(work);
 };
 
 export const processPayment = async (
@@ -140,9 +138,17 @@ export const getPatientInvoices = async (patient_id: number) => {
 };
 
 export const getDailyRevenue = async () => {
+  // ─── SARGable Fix: Use range-based filtering ───────────────────────────────
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
   const result = await db('invoices')
     .where('status', 'paid')
-    .whereRaw('DATE(updated_at) = CURRENT_DATE') // Assuming updated_at represents final payment time
+    .where('updated_at', '>=', start)
+    .where('updated_at', '<', end)
     .sum('final_amount as revenue')
     .first();
 

@@ -7,7 +7,7 @@ if (!stripeSecretKey) {
 }
 
 export const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: '2026-03-25.dahlia', // Best practice is to lock API version
+  apiVersion: '2023-10-16' as any, // Best practice is to lock API version
 });
 
 export const stripeService = {

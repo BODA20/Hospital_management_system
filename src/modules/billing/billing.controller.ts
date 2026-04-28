@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 import * as billingService from './services/billing.service';
 import { stripeService } from './services/stripe.service';
 import { addInvoiceItemSchema, payInvoiceSchema } from './billing.schema';
@@ -23,6 +24,9 @@ export const processPayment = async (
       data: invoice,
     });
   } catch (err) {
+    if (err instanceof ZodError) {
+      return res.status(400).json({ status: 'error', message: err.issues[0].message });
+    }
     next(err);
   }
 };
@@ -47,6 +51,9 @@ export const addInvoiceItem = async (
       data: result,
     });
   } catch (err) {
+    if (err instanceof ZodError) {
+      return res.status(400).json({ status: 'error', message: err.issues[0].message });
+    }
     next(err);
   }
 };
@@ -62,7 +69,7 @@ export const getPatientInvoices = async (
       return res.status(400).json({ status: 'error', message: 'Invalid patient ID' });
     }
 
-    const invoices = await billingService.getPatientInvoices(patientId);
+    const invoices = await billingService.getPatientInvoices(patientId, (req as any).user.id, (req as any).user.role);
     res.json({
       status: 'success',
       data: invoices,
@@ -99,7 +106,7 @@ export const getInvoiceById = async (
       return res.status(400).json({ status: 'error', message: 'Invalid ID' });
     }
 
-    const data = await billingService.getInvoiceDetails(id);
+    const data = await billingService.getInvoiceDetails(id, (req as any).user.id, (req as any).user.role);
     res.json({
       status: 'success',
       data,
@@ -120,7 +127,7 @@ export const createCheckoutSession = async (
       return res.status(400).json({ status: 'error', message: 'Invalid ID' });
     }
 
-    const invoice = await billingService.getInvoiceDetails(id);
+    const invoice = await billingService.getInvoiceDetails(id, (req as any).user.id, (req as any).user.role);
     
     if (invoice.status !== 'pending') {
       return res.status(422).json({ 
@@ -162,3 +169,4 @@ export const paymentCancel = (_req: Request, res: Response) => {
     </html>
   `);
 };
+

@@ -11,34 +11,43 @@ billingRouter.get('/cancel', billingController.paymentCancel);
 // Apply auth middleware to all remaining routes
 billingRouter.use(protect);
 
-// Invoice management
-billingRouter.get('/:id', billingController.getInvoiceById);
-billingRouter.post(
-  '/:id/items',
-  restrictTo('admin', 'doctor', 'nurse'), // Who can add items? Let's allow medical staff/admin
-  billingController.addInvoiceItem
-);
-billingRouter.post(
-  '/:id/pay',
-  restrictTo('admin', 'receptionist'), // Patients must use Stripe Checkout. Staff manually logs physical payments.
-  billingController.processPayment
-);
+// ── Specific routes MUST come before /:id catch-all ──────────────────────────
 
-billingRouter.post(
-  '/:id/create-checkout-session',
-  restrictTo('patient', 'admin', 'receptionist'),
-  billingController.createCheckoutSession
-);
-
-// Reports
+// Patient invoice history
 billingRouter.get(
   '/patient/:patientId',
   billingController.getPatientInvoices
 );
 
-// We need to keep dashboard under another route maybe? But sure:
+// Revenue report (admin only)
 billingRouter.get(
   '/reports/daily-revenue',
   restrictTo('admin'),
   billingController.getDailyRevenue
+);
+
+// ── Dynamic :id routes ────────────────────────────────────────────────────────
+
+// Retrieve a single invoice with its items
+billingRouter.get('/:id', billingController.getInvoiceById);
+
+// Add a line item to an invoice
+billingRouter.post(
+  '/:id/items',
+  restrictTo('admin', 'doctor', 'nurse'),
+  billingController.addInvoiceItem
+);
+
+// Manual cash/card payment (staff only — patients use Stripe Checkout)
+billingRouter.post(
+  '/:id/pay',
+  restrictTo('admin', 'receptionist'),
+  billingController.processPayment
+);
+
+// Stripe online checkout session
+billingRouter.post(
+  '/:id/create-checkout-session',
+  restrictTo('patient', 'admin', 'receptionist'),
+  billingController.createCheckoutSession
 );
