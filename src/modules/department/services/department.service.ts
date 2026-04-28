@@ -15,7 +15,7 @@ export const createDepartment = async (body: {
   if (count >= MAX_DEPARTMENTS) {
     throw new appError(
       `Maximum number of departments (${MAX_DEPARTMENTS}) reached. Cannot create more departments.`,
-      422,
+      400,
     );
   }
 
@@ -65,7 +65,7 @@ export const deleteDepartment = async (id: number) => {
   if (doctorCount > 0) {
     throw new appError(
       `Cannot delete this department — ${doctorCount} doctor(s) are still assigned to it. Reassign them first.`,
-      422,
+      400,
     );
   }
 
