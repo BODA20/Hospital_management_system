@@ -45,7 +45,7 @@ export const getPatientById = asyncHandler(
 
 // ─── Get My Profile (patient) ─────────────────────────────────────────────────
 export const getMyProfile = asyncHandler(
-  async (req: any, res: Response) => {
+  async (req: Request, res: Response) => {
     const patient = await patientService.getMyProfile(req.user.id);
     res.json({ status: 'success', data: patient });
   },
@@ -82,7 +82,7 @@ export const getPatientAppointments = asyncHandler(
 
 // ─── Get My Appointments (patient — self-service) ─────────────────────────────
 export const getMyAppointments = asyncHandler(
-  async (req: any, res: Response) => {
+  async (req: Request, res: Response) => {
     const result = await patientService.getMyAppointments(req.user.id);
     res.json({ status: 'success', data: result });
   },
