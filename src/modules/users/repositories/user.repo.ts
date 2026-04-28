@@ -8,6 +8,14 @@ import type {
   UserRole,
 } from '../user.types';
 
+// ─── Auth-specific shape needed by protect middleware ──────────────────────────
+export interface AuthUserRow {
+  id: number;
+  role: string;
+  is_active: boolean;
+  password_change_at: Date | null;
+}
+
 export const findAllUsers = async (): Promise<PublicUser[]> => {
   return db('users')
     .select('id', 'full_name', 'email', 'phone', 'role', 'is_active', 'created_at');
@@ -22,11 +30,23 @@ export const findUserById = async (
     .first();
 };
 
+// Used exclusively by the protect middleware — selects only the fields needed
+// for auth checks to keep the payload minimal.
+export const findUserForAuth = async (
+  id: number,
+): Promise<AuthUserRow | undefined> => {
+  return db<User>('users')
+    .select('id', 'role', 'is_active', 'password_change_at')
+    .where({ id })
+    .first() as Promise<AuthUserRow | undefined>;
+};
+
 export async function findUserWithPasswordById(
   id: number,
 ): Promise<User | undefined> {
   return db<User>('users').where({ id }).first();
 }
+
 export const findUserByEmail = async (
   email: string,
 ): Promise<User | undefined> => {
@@ -36,10 +56,11 @@ export const findUserByEmail = async (
       'full_name',
       'email',
       'phone',
-      'password',
+      'password_hash',
       'role',
       'is_active',
       'created_at',
+      'password_change_at',
     )
     .where({ email })
     .first();
@@ -57,32 +78,28 @@ export const createUser = async (data: NewUserInput, trx?: Knex.Transaction): Pr
 export const updateUserById = async (
   id: number,
   data: Partial<UpdateProfileDTO>,
-  trx?: Knex.Transaction, // البراميتر التالت تمام
-): Promise<any> => { // خليناها any مؤقتاً عشان الـ Returning
-  
-  // 1. ضيف الـ phone هنا عشان يتعدل
-  const allowedFields = ['full_name', 'phone']; 
-  
-  const filteredData = Object.keys(data)
+  trx?: Knex.Transaction,
+): Promise<PublicUser> => {
+  const allowedFields: (keyof UpdateProfileDTO)[] = ['full_name', 'phone'];
+
+  const filteredData = (Object.keys(data) as (keyof UpdateProfileDTO)[])
     .filter((key) => allowedFields.includes(key))
     .reduce((obj, key) => {
-      obj[key as keyof UpdateProfileDTO] = data[key as keyof UpdateProfileDTO];
+      obj[key] = (data as any)[key];
       return obj;
-    }, {} as any);
+    }, {} as Partial<UpdateProfileDTO>);
 
-  // 2. استخدم الـ Query Builder بذكاء مع الـ trx
   const query = db('users')
     .where({ id })
     .update(filteredData)
     .returning(['id', 'full_name', 'role', 'email', 'phone', 'is_active', 'created_at']);
 
-  // 3. دي أهم حتة: اربط الاستعلام بالـ Transaction لو موجودة
   if (trx) {
     query.transacting(trx);
   }
 
   const [user] = await query;
-  return user;
+  return user as PublicUser;
 };
 
 export const deactivateUser = async (id: number): Promise<PublicUser> => {
@@ -150,7 +167,7 @@ export const updateUserRole = async (
 export const adminUpdateUser = async (
   id: number,
   data: { full_name?: string; role?: string; is_active?: boolean },
-  trx?: Knex.Transaction
+  trx?: Knex.Transaction,
 ): Promise<PublicUser> => {
   const filteredData: Partial<User> = {};
   if (data.full_name !== undefined) filteredData.full_name = data.full_name;
