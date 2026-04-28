@@ -17,7 +17,7 @@ export const getNurseById = asyncHandler(async (req: Request, res: Response) => 
   res.json({ status: 'success', data: nurse });
 });
 
-export const getNursesByDoctor = asyncHandler(async (req: any, res: Response) => {
+export const getNursesByDoctor = asyncHandler(async (req: Request, res: Response) => {
   const data = await nurseService.getNursesByDoctor(req.user.id);
   res.json({ status: 'success', data });
 });
