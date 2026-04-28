@@ -1,32 +1,36 @@
 import db from '../../../config/db';
 
-// ─── Global Hospital Stats (existing — unchanged) ──────────────────────────────
+// ?????? Global Hospital Stats (existing � unchanged) ????????????????????????????????????????????????????????????????
 export const getGlobalStats = async () => {
-  // Total patients and doctors (parallel)
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
   const [[{ count: total_patients }], [{ count: total_doctors }]] =
     await Promise.all([
       db('patients').count('id as count'),
       db('doctors').count('id as count'),
     ]);
 
-  // Today's appointments (uses the `starts_at` column per schema)
   const [{ count: today_appointments }] = await db('appointments')
     .count('id as count')
-    .whereRaw(`starts_at::date = CURRENT_DATE`);
+    .where('starts_at', '>=', todayStart)
+    .where('starts_at', '<', todayEnd);
 
-  // Today's completed visits
   const [{ count: today_attended }] = await db('visits')
     .count('id as count')
-    .whereRaw(`check_in_at::date = CURRENT_DATE`)
+    .where('check_in_at', '>=', todayStart)
+    .where('check_in_at', '<', todayEnd)
     .andWhere('status', 'completed');
 
-  // Department activity: count of appointments per department for today
   const dept_activity = await db('appointments as a')
     .join('doctors as d', 'a.doctor_id', 'd.id')
     .join('departments as dept', 'd.department_id', 'dept.id')
     .select('dept.name as department', 'dept.code as code')
     .count('a.id as appointment_count')
-    .whereRaw(`a.starts_at::date = CURRENT_DATE`)
+    .where('a.starts_at', '>=', todayStart)
+    .where('a.starts_at', '<', todayEnd)
     .groupBy('dept.id', 'dept.name', 'dept.code')
     .orderBy('appointment_count', 'desc');
 
@@ -39,54 +43,62 @@ export const getGlobalStats = async () => {
   };
 };
 
-// ─── Range-based queries for comparative dashboard ──────────────────────────────
-// All ranges use half-open interval [start, end) via >= start AND < end+1day
-
 /**
- * Total paid invoice revenue within the date range.
+ * Consolidated Comparative Metrics for Dashboard
+ * Fetches revenue, patients, and appointments for BOTH current and previous periods in 1 query.
  */
-export const getRevenueForRange = async (
-  start: string,
-  end: string,
-): Promise<number> => {
-  const [{ revenue }] = await db('invoices')
-    .select(db.raw('COALESCE(SUM(final_amount), 0) AS revenue'))
-    .where('status', 'paid')
-    .andWhere('created_at', '>=', `${start}T00:00:00`)
-    .andWhere('created_at', '<', nextDay(end));
+export const getComparativeMetrics = async (
+  currentStart: string,
+  currentEnd: string,
+  previousStart: string,
+  previousEnd: string,
+) => {
+  const nextDayCurrent = nextDay(currentEnd);
+  const nextDayPrevious = nextDay(previousEnd);
 
-  return Number(revenue);
-};
+  const sql = `
+    WITH metrics AS (
+      -- Current Period
+      SELECT 
+        'current' as period,
+        (SELECT COALESCE(SUM(final_amount), 0) FROM invoices WHERE status = 'paid' AND created_at >= ? AND created_at < ?) as revenue,
+        (SELECT COUNT(*) FROM patients WHERE created_at >= ? AND created_at < ?) as patients,
+        (SELECT COUNT(*) FROM appointments WHERE status IN ('scheduled','completed') AND starts_at >= ? AND starts_at < ?) as appointments
+      UNION ALL
+      -- Previous Period
+      SELECT 
+        'previous' as period,
+        (SELECT COALESCE(SUM(final_amount), 0) FROM invoices WHERE status = 'paid' AND created_at >= ? AND created_at < ?) as revenue,
+        (SELECT COUNT(*) FROM patients WHERE created_at >= ? AND created_at < ?) as patients,
+        (SELECT COUNT(*) FROM appointments WHERE status IN ('scheduled','completed') AND starts_at >= ? AND starts_at < ?) as appointments
+    )
+    SELECT * FROM metrics;
+  `;
 
-/**
- * Number of patients registered within the date range.
- */
-export const getPatientCountForRange = async (
-  start: string,
-  end: string,
-): Promise<number> => {
-  const [{ count }] = await db('patients')
-    .count('id as count')
-    .where('created_at', '>=', `${start}T00:00:00`)
-    .andWhere('created_at', '<', nextDay(end));
+  const { rows } = await db.raw(sql, [
+    currentStart + 'T00:00:00', nextDayCurrent,
+    currentStart + 'T00:00:00', nextDayCurrent,
+    currentStart + 'T00:00:00', nextDayCurrent,
+    previousStart + 'T00:00:00', nextDayPrevious,
+    previousStart + 'T00:00:00', nextDayPrevious,
+    previousStart + 'T00:00:00', nextDayPrevious,
+  ]);
 
-  return Number(count);
-};
+  const current = rows.find((r: any) => r.period === 'current');
+  const previous = rows.find((r: any) => r.period === 'previous');
 
-/**
- * Number of appointments (scheduled or completed) within the date range.
- */
-export const getAppointmentCountForRange = async (
-  start: string,
-  end: string,
-): Promise<number> => {
-  const [{ count }] = await db('appointments')
-    .count('id as count')
-    .whereIn('status', ['scheduled', 'completed'])
-    .andWhere('starts_at', '>=', `${start}T00:00:00`)
-    .andWhere('starts_at', '<', nextDay(end));
-
-  return Number(count);
+  return {
+    current: {
+      revenue: Number(current.revenue),
+      patients: Number(current.patients),
+      appointments: Number(current.appointments),
+    },
+    previous: {
+      revenue: Number(previous.revenue),
+      patients: Number(previous.patients),
+      appointments: Number(previous.appointments),
+    },
+  };
 };
 
 /**
@@ -103,7 +115,7 @@ export const getTopDoctors = async (
     .select('d.id', 'u.full_name as name')
     .count('v.id as visit_count')
     .where('v.status', 'completed')
-    .andWhere('v.check_in_at', '>=', `${start}T00:00:00`)
+    .andWhere('v.check_in_at', '>=', start + 'T00:00:00')
     .andWhere('v.check_in_at', '<', nextDay(end))
     .groupBy('d.id', 'u.full_name')
     .orderBy('visit_count', 'desc')
@@ -117,8 +129,7 @@ export const getTopDoctors = async (
 };
 
 /**
- * Daily breakdown of revenue, patients, and appointments for chartData.
- * Uses PostgreSQL generate_series for gap-free date coverage.
+ * Daily breakdown for chartData.
  */
 export const getDailyBreakdown = async (
   start: string,
@@ -126,6 +137,7 @@ export const getDailyBreakdown = async (
 ): Promise<
   { date: string; revenue: number; patients: number; appointments: number }[]
 > => {
+  const nextDayVal = nextDay(end);
   const rows = await db.raw(
     `
     SELECT
@@ -161,9 +173,9 @@ export const getDailyBreakdown = async (
     `,
     [
       start, end,
-      `${start}T00:00:00`, nextDay(end),
-      `${start}T00:00:00`, nextDay(end),
-      `${start}T00:00:00`, nextDay(end),
+      start + 'T00:00:00', nextDayVal,
+      start + 'T00:00:00', nextDayVal,
+      start + 'T00:00:00', nextDayVal,
     ],
   );
 
@@ -175,11 +187,9 @@ export const getDailyBreakdown = async (
   }));
 };
 
-// ─── Helpers ────────────────────────────────────────────────────────────────────
-
-/** Return the day AFTER `dateStr` as a timestamp string for half-open ranges. */
+// ?? helpers ??
 function nextDay(dateStr: string): string {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + 1);
-  return `${d.toISOString().slice(0, 10)}T00:00:00`;
+  return d.toISOString().split('T')[0] + 'T00:00:00';
 }
