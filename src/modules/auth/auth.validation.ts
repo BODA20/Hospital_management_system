@@ -6,6 +6,13 @@ export const signupSchema = z
     email: z.string().trim().toLowerCase().email(),
     password: passwordSchema,
     role: z.enum(['admin', 'doctor', 'nurse', 'patient']),
+    phone: z
+      .string()
+      .trim()
+      .regex(/^(\+)?\d+$/, 'Phone must contain only digits and an optional "+" prefix')
+      .min(10, 'Phone must be at least 10 characters')
+      .max(20, 'Phone must be at most 20 characters')
+      .optional(),
   })
   .strict();
 

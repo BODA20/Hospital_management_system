@@ -29,4 +29,4 @@ export interface User {
 }
 
 export type PublicUser = Omit<User, 'password_hash'>;
-export type NewUserInput = Pick<User, 'full_name' | 'email' | 'password_hash'>;
+export type NewUserInput = Pick<User, 'full_name' | 'email' | 'password_hash' | 'phone'>;

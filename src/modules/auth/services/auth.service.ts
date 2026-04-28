@@ -54,6 +54,7 @@ export async function signup(dto: SignupDTO) {
         full_name: dto.full_name,
         email: dto.email,
         password_hash,
+        phone: dto.phone,
       },
       trx,
     );
@@ -89,6 +90,7 @@ export async function login(
     role: user.role,
     is_active: user.is_active,
     created_at: user.created_at,
+    phone: user.phone,
   };
 
   return { accessToken, refreshToken, user: publicUser };

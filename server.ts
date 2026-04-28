@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 // ─── Startup Env Validation ────────────────────────────────────────────────────
 // Must run BEFORE any module import that reads process.env (e.g. config/db.ts).
 const requiredEnv = [
@@ -10,7 +12,7 @@ const requiredEnv = [
 
 for (const key of requiredEnv) {
   if (!process.env[key]) {
-    console.error(\[FATAL] Missing required environment variable: \\);
+    console.error('[FATAL] Missing required environment variable:', key);
     process.exit(1);
   }
 }
@@ -30,12 +32,12 @@ db.raw('SELECT 1')
 
 // ─── Start Server ──────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {
-  console.log(\🚀 Server started on port \\);
+  console.log('\🚀 Server started on port \\');
 });
 
 // ─── Graceful Shutdown ──────────────────────────────────────────────────────────
 const shutdown = async (signal: string) => {
-  console.log(\\n\ received. Starting graceful shutdown...\);
+  console.log('\n\ received. Starting graceful shutdown...');
 
   server.close(() => {
     console.log('HTTP server closed.');

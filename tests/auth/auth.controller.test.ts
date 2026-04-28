@@ -131,6 +131,30 @@ describe('AUTH API CONTROLLER', () => {
         const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, role: 'hacker' });
         expect(res.status).toBe(400);
       });
+
+      it('should return 400 when phone is too short (< 10 characters)', async () => {
+        const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, phone: '123456789' });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toBe('Validation Error');
+        expect(res.body.errors[0].message).toMatch(/phone must be at least 10 characters/i);
+      });
+
+      it('should return 400 when phone contains invalid characters', async () => {
+        const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, phone: '123-456-7890' });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toBe('Validation Error');
+        expect(res.body.errors[0].message).toMatch(/phone must contain only digits/i);
+      });
+    });
+
+    describe('✅ Success — valid payload with phone', () => {
+      it('should return 201 Created when a valid phone is provided', async () => {
+        const res = await request(app)
+          .post('/api/v1/auth/signup')
+          .send({ ...VALID_SIGNUP_BODY, phone: '+1234567890' });
+        expect(res.status).toBe(201);
+        expect(res.body.status).toBe('success');
+      });
     });
 
     describe("🔒 Security — SQL injection in 'email' field", () => {
