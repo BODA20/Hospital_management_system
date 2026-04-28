@@ -21,7 +21,7 @@ export const createDoctorProfile = async (userId: number) => {
   return doctorsRepo.createDoctor({
     user_id: userId,
     specialization: null,
-    experience_years: 0,
+    years_of_experience: 0,
     bio: '',
     consultation_fee: 0,
   });
@@ -39,30 +39,26 @@ export const getMyProfile = async (userId: number) => {
 };
 
 // UPDATE MY PROFILE
-export const updateMyProfile = async (userId: number, body: UpdateDoctorInput) => {
-  const { user_id, role, ...allowedUpdates } = body as any;
-
-  if (allowedUpdates.experience_years !== undefined) {
-    allowedUpdates.experience_years = Math.floor(allowedUpdates.experience_years);
-    allowedUpdates.years_of_experience = allowedUpdates.experience_years;
-    delete allowedUpdates.experience_years;
-  }
-
+export const updateMyProfile = async (userId: number, body: any) => {
   return db.transaction(async (trx) => {
-    if (allowedUpdates.phone !== undefined) {
-      const { phone, ...doctorUpdates } = allowedUpdates;
-      await usersRepo.updateUserById(userId, { phone }, trx);
-      
-      const doctor = await doctorsRepo.findByUserId(userId, trx);
-      if (!doctor) throw new appError('Doctor profile not found', 404);
-      
-      return doctorsRepo.updateByUserId(userId, doctorUpdates, trx);
-    } else {
-      const doctor = await doctorsRepo.findByUserId(userId, trx);
-      if (!doctor) throw new appError('Doctor profile not found', 404);
-      
-      return doctorsRepo.updateByUserId(userId, allowedUpdates, trx);
+    // Check if profile exists
+    const doctor = await doctorsRepo.findByUserId(userId, trx);
+    if (!doctor) throw new appError('Doctor profile not found', 404);
+
+    // Data Consistency: Strip restricted fields to prevent overwriting context
+    const { user_id, role, ...updateData } = body;
+
+    // Formatting: Handle years_of_experience / experience_years (TDD requirement)
+    if (updateData.experience_years !== undefined) {
+      updateData.years_of_experience = updateData.experience_years;
+      delete updateData.experience_years;
     }
+
+    if (updateData.years_of_experience !== undefined) {
+      updateData.years_of_experience = Math.round(Number(updateData.years_of_experience));
+    }
+    
+    return doctorsRepo.updateByUserId(userId, updateData as UpdateDoctorInput, trx);
   });
 };
 

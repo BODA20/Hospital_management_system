@@ -1,8 +1,20 @@
 import db from '../../../config/db';
 import type { Knex } from 'knex';
+import { UpdateDoctorInput } from '../doctor.schema';
+
+export interface DoctorDbRow {
+  id: number;
+  user_id: number;
+  specialization: string | null;
+  years_of_experience: number;
+  bio: string;
+  consultation_fee: number;
+  department_id: number | null;
+  created_at: Date;
+  updated_at: Date;
+}
 
 // ─── Shared select columns ─────────────────────────────────────────────────────
-// Always join departments to include department details (eager loading).
 const withDepartment = (trx?: Knex.Transaction) => {
   const query = trx ? trx('doctors as d') : db('doctors as d');
   return query
@@ -19,31 +31,22 @@ const withDepartment = (trx?: Knex.Transaction) => {
 export const createDoctor = async (data: {
   user_id: number;
   specialization: string | null;
-  experience_years: number;
+  years_of_experience: number;
   bio: string;
   consultation_fee: number;
   department_id?: number;
 }, trx?: Knex.Transaction) => {
   const query = trx ? trx('doctors') : db('doctors');
-  
-  const dbData = {
-    user_id: data.user_id,
-    specialization: data.specialization,
-    years_of_experience: data.experience_years,
-    bio: data.bio,
-    consultation_fee: data.consultation_fee,
-    department_id: data.department_id,
-  };
-
-  const [doctor] = await query.insert(dbData).returning('*');
+  const [doctor] = await query.insert(data).returning('*');
   return doctor;
 };
 
 // ─── Find by doctors.id (PK) ───────────────────────────────────────────────────
-export const findById = async (id: number) => {
-  const doctor = await withDepartment().where('d.id', id).first();
+export const findById = async (id: number, trx?: Knex.Transaction) => {
+  const doctor = await withDepartment(trx).where('d.id', id).first();
   if (doctor) {
-    const user = await db('users').where('id', doctor.user_id).first();
+    const query = trx ? trx('users') : db('users');
+    const user = await query.where('id', doctor.user_id).first();
     doctor.user = user;
   }
   return doctor;
@@ -55,11 +58,11 @@ export const findByUserId = async (userId: number, trx?: Knex.Transaction) => {
 };
 
 // ─── Update by user_id ─────────────────────────────────────────────────────────
-export const updateByUserId = async (userId: number, data: any, trx?: Knex.Transaction) => {
+export const updateByUserId = async (userId: number, data: UpdateDoctorInput, trx?: Knex.Transaction) => {
   const query = trx ? trx('doctors') : db('doctors');
   const [updated] = await query
     .where({ user_id: userId })
-    .update(data)
+    .update({ ...data, updated_at: db.fn.now() })
     .returning('*');
 
   return updated;
@@ -70,12 +73,13 @@ export const getAllDoctors = async (filters: { specialization?: string; name?: s
   const query = withDepartment().leftJoin('users as u', 'd.user_id', 'u.id');
 
   if (filters.specialization) {
-    query.where('d.specialization', 'ilike', `%${filters.specialization}%`);
+    query.where("d.specialization", "ilike", `%${filters.specialization}%`);
   }
   
   if (filters.name) {
-    query.where('u.full_name', 'ilike', `%${filters.name}%`);
+    query.where("u.full_name", "ilike", `%${filters.name}%`);
   }
 
   return query.orderBy('d.id', 'asc');
 };
+

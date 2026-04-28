@@ -2,16 +2,8 @@ import { Request, Response } from 'express';
 import * as doctorsService from '../services/doctor.service';
 import { asyncHandler } from '../../../common/utils/asyncHandler';
 
-interface AuthRequest extends Request {
-  user: {
-    id: number;
-    role: string;
-  };
-}
-
 export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const doctor = await doctorsService.getMyProfile(authReq.user.id);
+  const doctor = await doctorsService.getMyProfile(req.user.id);
 
   res.status(200).json({
     status: 'success',
@@ -20,8 +12,7 @@ export const getMyProfile = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const updated = await doctorsService.updateMyProfile(authReq.user.id, req.body);
+  const updated = await doctorsService.updateMyProfile(req.user.id, req.body);
 
   res.status(200).json({
     status: 'success',
@@ -60,8 +51,7 @@ export const getDoctorById = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getMyAppointments = asyncHandler(async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const appointments = await doctorsService.getDoctorAppointments(authReq.user.id);
+  const appointments = await doctorsService.getDoctorAppointments(req.user.id);
 
   res.status(200).json({
     status: 'success',
