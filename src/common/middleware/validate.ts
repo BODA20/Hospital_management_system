@@ -14,14 +14,22 @@ function formatZod(err: ZodError) {
 export const validate =
   (schema: ZodSchema, where: Where = 'body'): RequestHandler =>
   (req, _res, next) => {
-    const result = schema.safeParse((req as any)[where] || {});
+    const result = schema.safeParse((req as any)[where] ?? {});
     if (!result.success) {
       const formattedErrors = formatZod(result.error);
-      console.log('Zod Validation Errors:', formattedErrors);
-
       return next(new appError('Validation Error', 400, formattedErrors));
     }
 
-    (req as any)[where] = result.data;
+    // req.query is a read-only getter in Express 5 — use defineProperty to override safely
+    if (where === 'query') {
+      Object.defineProperty(req, 'query', {
+        value: result.data,
+        writable: true,
+        configurable: true,
+      });
+    } else {
+      (req as any)[where] = result.data;
+    }
     next();
   };
+

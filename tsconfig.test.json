@@ -9,8 +9,8 @@
     "types": ["jest", "node"]
   },
   "include": [
-    "src/**/__tests__/**/*.ts",
-    "src/**/*.spec.ts",
-    "jest.config.ts"
+    "src/**/*",
+    "tests/**/*",
+    "*.ts"
   ]
 }
