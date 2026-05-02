@@ -72,6 +72,7 @@ export async function signup(dto: SignupDTO) {
 export async function login(
   dto: LoginDTO,
 ): Promise<{ accessToken: string; user: PublicUser; refreshToken: string }> {
+
   const user = await usersRepo.findUserByEmail(dto.email);
 
   if (!user) throw new appError('Invalid email or password', 401);
@@ -81,7 +82,9 @@ export async function login(
   if (!ok) throw new appError('Invalid email or password', 401);
 
   const accessToken = signToken({ id: user.id, role: user.role });
+
   const { refreshToken } = await sessionService.createSession(user.id);
+
 
   const publicUser: PublicUser = {
     id: user.id,

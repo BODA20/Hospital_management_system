@@ -16,7 +16,7 @@ export async function seedAdmin() {
   await db('users').insert({
     full_name: 'Boda Admin',
     email: 'bodadmin@system.com',
-    password: hashed,
+    password_hash: hashed,
     role: UserRole.ADMIN,
     is_active: true,
   });
