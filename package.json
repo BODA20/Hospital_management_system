@@ -2,8 +2,10 @@
   "name": "hospital_management--system",
   "version": "1.0.0",
   "description": "",
-  "main": "server.ts",
+  "main": "dist/server.js",
   "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only server.ts",
     "migrate:create": "node-pg-migrate create",
     "migrate:up": "node-pg-migrate up",

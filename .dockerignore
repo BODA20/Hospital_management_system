@@ -1,0 +1,54 @@
+# ── Node / Package Manager ────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm/
+
+# ── TypeScript Build Output ──────────────────────────────────────────────────
+dist/
+build/
+*.tsbuildinfo
+
+# ── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example          # keep the example template — it has no real secrets
+
+# ── Version Control ──────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+
+# ── OS Artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Test / Coverage Output ───────────────────────────────────────────────────
+coverage/
+*.lcov
+test_output*.log
+test_results*.txt
+migration_error.log
+
+# ── Docker Files (no need to copy into the build context) ───────────────────
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# ── Logs & Temp Files ────────────────────────────────────────────────────────
+logs/
+*.log
+tmp/
+temp/
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────────
+README.md
+*.md
