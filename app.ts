@@ -13,11 +13,27 @@ import { visitsRouter } from './src/modules/visits/visits.routes';
 import { dashboardRouter } from './src/modules/dashboard/dashboard.routes';
 import { billingRouter } from './src/modules/billing/billing.routes';
 import { stripeWebhookRouter } from './src/modules/billing/stripe.webhook.routes';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import cors from 'cors';
 
 export const app = express();
 
-// Stripe webhook requires raw body payload to verify signatures securely.
-// We mount this strictly *before* express.json() to prevent body mutation.
+app.use(helmet());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+  credentials: true,
+}));
+app.use(express.json({ limit: '10kb' }));
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 100, 
+  message: { status: 'fail', message: 'Too many requests from this IP, please try again later.' },
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
+app.use('/api', globalLimiter);
+
 app.use('/api/v1/billing/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRouter);
 
 app.use(express.json());

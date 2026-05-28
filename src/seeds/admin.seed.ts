@@ -1,13 +1,15 @@
 import bcrypt from 'bcrypt';
 import db from '../config/db';
 import { UserRole } from '../modules/users/user.types';
+import logger from '../common/utils/logger';
+
 export async function seedAdmin() {
   const existing = await db('users')
     .where({ email: 'bodaAdmin@system.com' })
     .first();
 
   if (existing) {
-    console.log('Admin already exists');
+    logger.info('Admin already exists');
     return;
   }
 
@@ -21,5 +23,5 @@ export async function seedAdmin() {
     is_active: true,
   });
 
-  console.log('Admin seeded ✅');
+  logger.info('Admin seeded ✅');
 }

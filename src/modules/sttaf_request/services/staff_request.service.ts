@@ -5,6 +5,7 @@ import * as doctorRepo from '../../doctors/repositories/doctor.repo';
 import * as nurseRepo from '../../nurses/repositories/nurse.repository';
 import * as patientRepo from '../../patients/repositories/patient.repository';
 import db from '../../../config/db';
+import logger from '../../../common/utils/logger';
 
 export const getStaffRequest = async (userId: number) => {
   const request = await staffRepo.getAllPending();
@@ -89,7 +90,7 @@ export const approveRequest = async (requestId: number, adminId: number) => {
       return { message: 'Request approved successfully' };
     });
   } catch (error: any) {
-    console.error('CRASH IN APPROVE REQUEST:', error);
+    logger.error('CRASH IN APPROVE REQUEST', { error: error instanceof Error ? error.message : error });
     throw new appError(error.message || 'Failed to provision staff profile', 500);
   }
 };

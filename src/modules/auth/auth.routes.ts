@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit'; 
 import { validate } from '../../common/middleware/validate';
 import {
   loginSchema,
@@ -14,17 +15,22 @@ import { protect } from '../../common/middleware/auth';
 
 const router = Router();
 
-router.post('/signup', validate(signupSchema), authController.signup);
 
-router.post('/login', validate(loginSchema), authController.login);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 20, 
+  message: { 
+    status: 'fail', 
+    message: 'Too many attempts, please try again after 15 minutes.' 
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
+router.post('/signup', authLimiter, validate(signupSchema), authController.signup);
+router.post('/login', authLimiter, validate(loginSchema), authController.login);
+router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 router.post('/refresh', validate(refreshSchema), authController.refresh);
-
-router.post(
-  '/forgot-password',
-  validate(forgotPasswordSchema),
-  authController.forgotPassword,
-);
 
 router.patch(
   '/reset-password/:token',

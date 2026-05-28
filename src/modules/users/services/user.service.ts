@@ -1,5 +1,5 @@
 const stripSensitive = (user: any) => {
-  if (!user) return stripSensitive(user);
+  if (!user) return user;
   const { password_hash, password_reset_token, password_reset_expires, email_change_token, ...safeUser } = user;
   return safeUser;
 };

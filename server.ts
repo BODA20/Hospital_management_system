@@ -1,6 +1,6 @@
 import 'dotenv/config';
+import logger from './src/common/utils/logger'; 
 
-// ─── Startup Env Validation ────────────────────────────────────────────────────
 const requiredEnv = [
   'JWT_SECRET',
   'DB_HOST',
@@ -11,7 +11,7 @@ const requiredEnv = [
 
 for (const key of requiredEnv) {
   if (!process.env[key]) {
-    console.error('[FATAL] Missing required environment variable:', key);
+    logger.error(`[FATAL] Missing required environment variable: ${key}`);
     process.exit(1);
   }
 }
@@ -23,29 +23,44 @@ const PORT = process.env.PORT || 5000;
 
 // ─── DB Connection Check ───────────────────────────────────────────────────────
 db.raw('SELECT 1')
-  .then(() => console.log('Database connected successfully'))
+  .then(() => {
+    logger.info('Database connected successfully'); // تبديل الـ console.log
+  })
   .catch((err) => {
-    console.error('Database connection error:', err);
+    logger.error('Database connection error', { error: err.message }); // تبديل الـ console.error
     process.exit(1);
   });
 
-// ─── Start Server ──────────────────────────────────────────────────────────────
 const server = app.listen(PORT, () => {
-  console.log('Hospital Management System running on port ' + PORT);
-  console.log('Environment: ' + (process.env.NODE_ENV || 'development'));
-  console.log('DB: ' + process.env.DB_HOST + ':' + process.env.DB_PORT + '/' + process.env.DB_NAME);
+  logger.info('Hospital Management System started successfully', {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    database: `${process.env.DB_HOST}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME}`
+  });
 });
 
 // ─── Graceful Shutdown ──────────────────────────────────────────────────────────
 const shutdown = async (signal: string) => {
-  console.log(signal + ' received. Starting graceful shutdown...');
+  logger.warn(`${signal} received. Starting graceful shutdown...`); // استخدام warn للتحذيرات
+  
   server.close(() => {
-    console.log('HTTP server closed.');
+    logger.info('HTTP server closed.');
+    
     db.destroy()
-      .then(() => { console.log('Database pool destroyed.'); process.exit(0); })
-      .catch((err) => { console.error('Error destroying pool:', err); process.exit(1); });
+      .then(() => { 
+        logger.info('Database pool destroyed.'); 
+        process.exit(0); 
+      })
+      .catch((err) => { 
+        logger.error('Error destroying pool', { error: err.message }); 
+        process.exit(1); 
+      });
   });
-  setTimeout(() => { console.error('Forcefully shutting down'); process.exit(1); }, 10000);
+
+  setTimeout(() => { 
+    logger.error('Forcefully shutting down due to timeout'); 
+    process.exit(1); 
+  }, 10000);
 };
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

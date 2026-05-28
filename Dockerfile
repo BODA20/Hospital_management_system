@@ -30,4 +30,4 @@ USER node
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "NODE_ENV=production npx knex migrate:latest --knexfile dist/knexfile.js && node dist/server.js"]
+CMD ["node", "dist/server.js"]

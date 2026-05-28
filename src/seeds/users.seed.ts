@@ -1,17 +1,17 @@
- // Removed static import for faker to fix ERR_REQUIRE_ESM
 import bcrypt from 'bcrypt';
 import db from '../config/db';
 import { UserRole } from '../modules/users/user.types';
+import logger from '../common/utils/logger';
 
 export async function seedUsers() {
+  // استيراد الـ faker ديناميكياً هنا لحل مشكلة ERR_REQUIRE_ESM
   const { faker } = await import('@faker-js/faker');
-  console.log('🔄 Starting Comprehensive Database Reset...');
+  logger.info('🔄 Starting Comprehensive Database Reset...');
 
   try {
     // Step 1: Data Cleanup (The Wipe)
-    // Order matters due to foreign keys, CASCADE handles it but explicit order is cleaner
     await db.raw('TRUNCATE TABLE appointments, visits, invoices, staff_requests, doctors, nurses, patients, users, departments RESTART IDENTITY CASCADE');
-    console.log('🧹 Database wiped and IDs reset ✅');
+    logger.info('🧹 Database wiped and IDs reset ✅');
 
     // Step 2: Seed Foundations (Departments)
     const departments = [
@@ -21,7 +21,7 @@ export async function seedUsers() {
       { name: 'General Medicine', code: 'GEN', description: 'General health care' },
     ];
     const deptIds = await db('departments').insert(departments).returning('id');
-    console.log('🏢 Departments seeded ✅');
+    logger.info('🏢 Departments seeded ✅');
 
     // Step 3: Create 10 Test Users (All initially Patients)
     const password = await bcrypt.hash('User123!', 12);
@@ -41,15 +41,14 @@ export async function seedUsers() {
       date_of_birth: faker.date.birthdate({ min: 18, max: 80, mode: 'age' }),
     }));
     await db('patients').insert(patientsData);
-    console.log('👥 10 Initial patients seeded ✅');
+    logger.info('👥 10 Initial patients seeded ✅');
 
     // Step 4: Staff Promotion (The Transition)
     // Pick 3 for Doctors
     const doctorUsers = insertedUsers.slice(0, 3);
     for (const user of doctorUsers) {
-      // 1. Update user role
       await db('users').where({ id: user.id }).update({ role: UserRole.DOCTOR });
-      // 2. Create doctor entry
+      
       await db('doctors').insert({
         user_id: user.id,
         salary: faker.number.int({ min: 5000, max: 15000 }),
@@ -58,7 +57,7 @@ export async function seedUsers() {
         bio: faker.lorem.paragraph(),
         listen_number: faker.number.int({ min: 1000, max: 9999 }),
       });
-      // 3. Delete from patients
+      
       await db('patients').where({ user_id: user.id }).delete();
     }
 
@@ -66,15 +65,17 @@ export async function seedUsers() {
     const nurseUsers = insertedUsers.slice(3, 5);
     for (const user of nurseUsers) {
       await db('users').where({ id: user.id }).update({ role: UserRole.NURSE });
+      
       await db('nurses').insert({
         user_id: user.id,
         salary: faker.number.int({ min: 3000, max: 7000 }),
         department_id: faker.helpers.arrayElement(deptIds).id,
-         shift: faker.helpers.arrayElement(['morning', 'evening', 'night']),
+        shift: faker.helpers.arrayElement(['morning', 'evening', 'night']),
       });
+      
       await db('patients').where({ user_id: user.id }).delete();
     }
-    console.log('🩺 3 Doctors and 2 Nurses promoted from patients ✅');
+    logger.info('🩺 3 Doctors and 2 Nurses promoted from patients ✅');
 
     // Remaining 5 stay as patients for testing
     const patientRecords = await db('patients').select('id');
@@ -117,29 +118,26 @@ export async function seedUsers() {
         }).returning('id');
 
         // Invoices
-    await db('invoices').insert({
-  invoice_no: `INV-${faker.string.alphanumeric(8).toUpperCase()}`,
-  patient_id: patient.id,
-  visit_id: visit.id,
-
-  total_amount: 500,
-  discount: 0,
-  tax: 50,
-  final_amount: 550,
-
-  status: 'pending',
-  payment_method: 'cash',
-
-  created_at: new Date(),
-  updated_at: new Date(),
-});
+        await db('invoices').insert({
+          invoice_no: `INV-${faker.string.alphanumeric(8).toUpperCase()}`,
+          patient_id: patient.id,
+          visit_id: visit.id,
+          total_amount: 500,
+          discount: 0,
+          tax: 50,
+          final_amount: 550,
+          status: 'pending',
+          payment_method: 'cash',
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
       }
     }
 
-    console.log('📊 Activity data (Requests, Appointments, Visits, Invoices) seeded ✅');
-    console.log('✨ Comprehensive seed completed successfully!');
+    logger.info('📊 Activity data (Requests, Appointments, Visits, Invoices) seeded ✅');
+    logger.info('✨ Comprehensive seed completed successfully!');
   } catch (error) {
-    console.error('❌ Error during seeding:', error);
+    logger.error('❌ Error during seeding', { error: error instanceof Error ? error.message : error });
     throw error;
   }
 }
