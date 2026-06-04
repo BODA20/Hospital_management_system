@@ -11,6 +11,8 @@ import * as sessionService from './session.service';
 import db from '../../../config/db';
 import * as patientRepo from '../../patients/repositories/patient.repository';
 import { invalidateUserCache } from '../../../common/utils/userCache';
+import * as cache from '../../../common/services/redisCache.service';
+import { buildBlacklistKey, ACCESS_TOKEN_TTL_SECONDS } from '../../../common/middleware/auth';
 
 function signToken(payload: { id: number; role: string }) {
   const secret = process.env.JWT_SECRET;
@@ -26,14 +28,14 @@ export async function refresh(refreshToken: string) {
     throw new appError('Refresh token is required', 400);
   }
 
-  const { userId } = await sessionService.rotateSession(refreshToken);
+  // Rotate session returns the new refresh token and the user ID
+  const { userId, refreshToken: newToken } = await sessionService.rotateSession(refreshToken);
 
   // Re-fetch the user to get the current role (role may have changed since last login)
   const user = await usersRepo.findUserById(userId);
   if (!user) throw new appError('User not found', 404);
 
   const accessToken = signToken({ id: userId, role: user.role });
-  const { refreshToken: newToken } = await sessionService.rotateSession(refreshToken);
 
   return {
     accessToken,
@@ -73,12 +75,21 @@ export async function login(
   dto: LoginDTO,
 ): Promise<{ accessToken: string; user: PublicUser; refreshToken: string }> {
 
+  console.log('[DEBUG LOGIN] Attempting login for:', dto.email);
   const user = await usersRepo.findUserByEmail(dto.email);
+  
+  if (!user) {
+    console.log('[DEBUG LOGIN] User not found in DB for email:', dto.email);
+    throw new appError('Invalid email or password', 401);
+  }
+  
+  console.log('[DEBUG LOGIN] User found:', { id: user.id, email: user.email, role: user.role, is_active: user.is_active });
 
-  if (!user) throw new appError('Invalid email or password', 401);
   if (!user.is_active) throw new appError('Account is deactivated', 403);
 
   const ok = await bcrypt.compare(dto.password, user.password_hash);
+  console.log('[DEBUG LOGIN] bcrypt.compare result for', dto.email, ':', ok);
+
   if (!ok) throw new appError('Invalid email or password', 401);
 
   const accessToken = signToken({ id: user.id, role: user.role });
@@ -99,22 +110,40 @@ export async function login(
   return { accessToken, refreshToken, user: publicUser };
 }
 
+// ── Password-Reset Token TTL ──────────────────────────────────────────────────
+// 15 minutes is the industry standard for one-time password reset links.
+const PASSWORD_RESET_TTL_SECONDS = 15 * 60; // 900 s
+
+/**
+ * Builds a namespaced Redis key for a password-reset token.
+ * Using a prefix prevents accidental key collisions with other features.
+ */
+function buildResetKey(hashedToken: string): string {
+  return `pwd_reset:${hashedToken}`;
+}
+
 export const forgotPassword = async (email: string) => {
   const user = await usersRepo.findUserByEmail(email);
   if (!user) {
-    // Return generic message to prevent email enumeration
+    // Return a generic message to prevent email enumeration attacks
     return { message: 'If that email is registered, a reset link has been sent.' };
   }
 
+  // Generate a cryptographically random raw token (sent in the email URL)
   const resetToken = crypto.randomBytes(32).toString('hex');
+  // Hash before storage — never persist raw tokens
   const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-  const expires = new Date();
-  expires.setHours(expires.getHours() + 1);
+  // Store { userId } in Redis under the hashed token key with a strict TTL.
+  // This replaces the password_reset_token / password_reset_expires DB columns
+  // with ephemeral Redis state, keeping the users table clean.
+  await cache.set(
+    buildResetKey(hashedToken),
+    { userId: user.id },
+    PASSWORD_RESET_TTL_SECONDS,
+  );
 
-  await authRepo.saveResetToken(user.id, hashedToken, expires);
-
-  const resetURL = `${process.env.APP_URL}/reset-password/`;
+  const resetURL = `${process.env.APP_URL}/reset-password/${resetToken}`;
 
   await new Email(
     { email: user.email, name: user.full_name },
@@ -126,39 +155,48 @@ export const forgotPassword = async (email: string) => {
 
 export const resetPassword = async (token: string, newPassword: string) => {
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-  const user = await authRepo.findByResetToken(hashedToken);
 
-  if (!user) {
+  // Look up the userId stored in Redis for this hashed token.
+  // `get` returns null if the key doesn't exist or has expired (TTL elapsed).
+  const payload = await cache.get<{ userId: number }>(buildResetKey(hashedToken));
+
+  if (!payload) {
     throw new appError('Token invalid or expired', 400);
-  }
-
-  if (new Date() > user.password_reset_expires!) {
-    throw new appError('Token has expired', 400);
   }
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
   const hashedPassword = await bcrypt.hash(newPassword, rounds);
 
-  await authRepo.UpdatePassword(user.id, hashedPassword);
-  await authRepo.ClearResetToken(user.id);
+  // UpdatePassword also sets password_change_at, which invalidates existing JWTs
+  await authRepo.UpdatePassword(payload.userId, hashedPassword);
 
-  // Invalidate the cache so the new password_change_at is picked up immediately
-  invalidateUserCache(user.id);
+  // Explicitly delete the Redis key so the token cannot be replayed
+  await cache.del(buildResetKey(hashedToken));
+
+  // Invalidate the in-memory user cache so the new password_change_at takes effect
+  invalidateUserCache(payload.userId);
 };
+
+const EMAIL_CHANGE_TTL_SECONDS = 60 * 60; // 1 hour
+
+function buildEmailChangeKey(hashedToken: string): string {
+  return `email_change:${hashedToken}`;
+}
 
 export const requestChangeEmail = async (userId: number, newEmail: string) => {
   const token = crypto.randomBytes(32).toString('hex');
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-  const expires = new Date();
-  expires.setHours(expires.getHours() + 1);
+  await cache.set(
+    buildEmailChangeKey(hashedToken),
+    { userId, newEmail },
+    EMAIL_CHANGE_TTL_SECONDS,
+  );
 
-  await usersRepo.saveEmailChangeToken(userId, hashedToken, newEmail, expires);
-
-  const verifyURL = `${process.env.APP_URL}/api/users/verify-email/`;
+  const verifyURL = `${process.env.APP_URL}/api/users/verify-email/${token}`;
 
   await new Email(
-    { email: newEmail, name: '' },
+    { email: newEmail },
     verifyURL,
   ).sendEmailChangeVerification();
 
@@ -167,25 +205,43 @@ export const requestChangeEmail = async (userId: number, newEmail: string) => {
 
 export const verifyNewEmail = async (token: string) => {
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-  const user = await usersRepo.findByEmailToken(hashedToken);
+  
+  const payload = await cache.get<{ userId: number; newEmail: string }>(buildEmailChangeKey(hashedToken));
 
-  if (!user) {
-    throw new appError('Token invalid', 400);
-  }
-  if (new Date() > user.email_change_expires!) {
-    throw new appError('Token has expired', 400);
+  if (!payload) {
+    throw new appError('Token invalid or expired', 400);
   }
 
-  await usersRepo.updateEmail(user.id, user.pending_email as string);
-  await usersRepo.clearEmailChangeToken(user.id);
+  await usersRepo.updateEmail(payload.userId, payload.newEmail);
+  await cache.del(buildEmailChangeKey(hashedToken));
 };
 
-export async function logout(refreshToken: string) {
+/**
+ * Logs the user out by:
+ * 1. Blacklisting the current access token in Redis (TTL = remaining token lifetime)
+ * 2. Revoking the refresh token session from Redis
+ *
+ * @param refreshToken - The opaque refresh token from the client body.
+ * @param accessToken  - The raw Bearer token from the Authorization header.
+ */
+export async function logout(refreshToken: string, accessToken: string) {
   if (!refreshToken) {
     throw new appError('Refresh token is required', 400);
   }
 
+  // 1. Blacklist the access token so it is rejected by the protect middleware
+  //    immediately, even before it expires naturally.
+  if (accessToken) {
+    await cache.set(
+      buildBlacklistKey(accessToken),
+      '1',                        // value is irrelevant — existence is the signal
+      ACCESS_TOKEN_TTL_SECONDS,   // TTL matches the access token lifetime (15 min)
+    );
+  }
+
+  // 2. Revoke the refresh token from the DB so it cannot be rotated.
   await sessionService.revokeSession(refreshToken);
+
   return { message: 'Logged out successfully' };
 }
 

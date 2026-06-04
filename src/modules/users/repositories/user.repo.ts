@@ -111,51 +111,15 @@ export const deactivateUser = async (id: number): Promise<PublicUser> => {
   return user;
 };
 
-export const saveEmailChangeToken = async (
-  userId: number,
-  token: string,
-  newEmail: string,
-  expires: Date,
-): Promise<void> => {
-  await db('users').where({ id: userId }).update({
-    email_change_token: token,
-    pending_email: newEmail,
-    email_change_expires: expires,
-  });
-};
-
 export const updateEmail = async (
   userId: number,
   newEmail: string,
 ): Promise<void> => {
   await db('users').where({ id: userId }).update({
     email: newEmail,
-    pending_email: null,
   });
 };
 
-export const clearEmailChangeToken = async (userId: number): Promise<void> => {
-  await db('users').where({ id: userId }).update({
-    email_change_token: null,
-    pending_email: null,
-    email_change_expires: null,
-  });
-};
-
-export const findByEmailToken = async (
-  token: string,
-): Promise<User | undefined> => {
-  return db<User>('users').where({ email_change_token: token }).first();
-};
-
-export const updateEmailChangeExpires = async (
-  userId: number,
-  expires: Date,
-): Promise<void> => {
-  await db('users')
-    .where({ id: userId })
-    .update({ email_change_expires: expires });
-};
 
 export const updateUserRole = async (
   userId: number,

@@ -75,8 +75,6 @@ export const approveRequest = async (requestId: number, adminId: number) => {
           await nurseRepo.createNurse({
             user_id: request.user_id,
             department_id: 1,
-            doctor_id: 1,
-            license_number: 'PENDING-' + request.user_id,
             shift: 'morning',
             years_of_experience: 0,
             notes: '',

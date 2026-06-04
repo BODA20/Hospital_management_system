@@ -40,7 +40,14 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
 
-  await authService.logout(refreshToken);
+  // Extract the raw access token from the Authorization header so auth.service
+  // can immediately blacklist it in Redis, invalidating it across all instances.
+  const authHeader = req.headers.authorization ?? '';
+  const accessToken = authHeader.startsWith('Bearer ')
+    ? authHeader.split(' ')[1]
+    : '';
+
+  await authService.logout(refreshToken, accessToken);
 
   res.status(200).json({
     status: 'success',

@@ -20,11 +20,6 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   created_at: Date;
-  password_reset_token?: string | null;
-  password_reset_expires?: Date | null;
-  email_change_token?: string | null;
-  pending_email?: string | null;
-  email_change_expires?: Date | null;
   password_change_at?: Date | null;
 }
 

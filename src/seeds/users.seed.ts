@@ -2,10 +2,9 @@ import bcrypt from 'bcrypt';
 import db from '../config/db';
 import { UserRole } from '../modules/users/user.types';
 import logger from '../common/utils/logger';
+import { faker } from '@faker-js/faker';
 
 export async function seedUsers() {
-  // استيراد الـ faker ديناميكياً هنا لحل مشكلة ERR_REQUIRE_ESM
-  const { faker } = await import('@faker-js/faker');
   logger.info('🔄 Starting Comprehensive Database Reset...');
 
   try {

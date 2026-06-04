@@ -5,7 +5,7 @@ import logger from '../common/utils/logger';
 
 export async function seedAdmin() {
   const existing = await db('users')
-    .where({ email: 'bodaAdmin@system.com' })
+    .where({ email: 'bodadmin@system.com' })
     .first();
 
   if (existing) {

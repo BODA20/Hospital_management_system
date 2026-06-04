@@ -1,34 +1,39 @@
-import * as sessionRepo from '../repositories/refreshToken.repo';
 import { generateRefreshToken } from '../utils/generateToken';
 import { hashToken } from '../utils/hashToken';
+import * as cache from '../../../common/services/redisCache.service';
 
 const REFRESH_EXPIRES_DAYS = 7;
+const REFRESH_TTL_SECONDS = REFRESH_EXPIRES_DAYS * 24 * 60 * 60;
 
-function getExpiryDate() {
-  return new Date(Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
+function buildKey(hash: string): string {
+  return `rt:${hash}`;
+}
+
+function buildUserKey(userId: number): string {
+  return `user_rt:${userId}`;
+}
+
+async function linkTokenToUser(userId: number, hash: string) {
+  const tokens = await cache.get<string[]>(buildUserKey(userId)) || [];
+  tokens.push(hash);
+  await cache.set(buildUserKey(userId), tokens, REFRESH_TTL_SECONDS);
 }
 
 export async function createSession(userId: number) {
   const refreshToken = generateRefreshToken();
-
   const hash = hashToken(refreshToken);
 
-  const session = await sessionRepo.createToken({
-    user_id: userId,
-    token_hash: hash,
-    expires_at: getExpiryDate(),
-  });
+  await cache.set(buildKey(hash), { userId }, REFRESH_TTL_SECONDS);
+  await linkTokenToUser(userId, hash);
 
   return {
     refreshToken,
-    session,
   };
 }
 
 export async function validateSession(refreshToken: string) {
   const hash = hashToken(refreshToken);
-
-  const session = await sessionRepo.findTokenByHash(hash);
+  const session = await cache.get<{ userId: number }>(buildKey(hash));
 
   if (!session) {
     throw new Error('Invalid refresh token');
@@ -39,47 +44,36 @@ export async function validateSession(refreshToken: string) {
 
 export async function rotateSession(oldToken: string) {
   const oldHash = hashToken(oldToken);
-
-  const oldSession = await sessionRepo.findTokenByHash(oldHash);
+  const oldSession = await cache.get<{ userId: number }>(buildKey(oldHash));
 
   if (!oldSession) {
     throw new Error('Invalid refresh token');
   }
 
-  if (oldSession.revoked) {
-    throw new Error('Refresh token already used');
-  }
+  // Revoke old token
+  await cache.del(buildKey(oldHash));
 
-  if (oldSession.expires_at < new Date()) {
-    throw new Error('Refresh token expired');
-  }
   const newToken = generateRefreshToken();
   const newHash = hashToken(newToken);
 
-  const newSession = await sessionRepo.createToken({
-    user_id: oldSession.user_id,
-    token_hash: newHash,
-    expires_at: getExpiryDate(),
-  });
-
-  await sessionRepo.replaceToken(oldSession.id, newSession.id);
+  await cache.set(buildKey(newHash), { userId: oldSession.userId }, REFRESH_TTL_SECONDS);
+  await linkTokenToUser(oldSession.userId, newHash);
 
   return {
     refreshToken: newToken,
-    userId: oldSession.user_id,
+    userId: oldSession.userId,
   };
 }
 
 export async function revokeSession(refreshToken: string) {
   const hash = hashToken(refreshToken);
-
-  const session = await sessionRepo.findTokenByHash(hash);
-
-  if (!session) return;
-
-  await sessionRepo.revokeToken(session.id);
+  await cache.del(buildKey(hash));
 }
 
 export async function revokeAllUserSessions(userId: number) {
-  await sessionRepo.revokeUserTokens(userId);
+  const tokens = await cache.get<string[]>(buildUserKey(userId)) || [];
+  for (const hash of tokens) {
+    await cache.del(buildKey(hash));
+  }
+  await cache.del(buildUserKey(userId));
 }

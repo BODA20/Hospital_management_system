@@ -25,12 +25,6 @@ nursesRouter.patch(
 
 nursesRouter.delete('/:id', restrictTo('admin'), nurseController.deleteNurse);
 
-// ─── Doctor route — view own nursing team ──────────────────────────────────────
-nursesRouter.get(
-  '/my-team',
-  restrictTo('doctor'),
-  nurseController.getNursesByDoctor,
-);
 
 // ─── Shared authenticated routes ───────────────────────────────────────────────
 nursesRouter.get('/', nurseController.getAllNurses);

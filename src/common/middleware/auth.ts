@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { appError } from '../errors/AppError';
 import * as usersRepo from '../../modules/users/repositories/user.repo';
 import { getCachedUser, setCachedUser } from '../utils/userCache';
+import * as cache from '../services/redisCache.service';
 
 type JwtPayload = {
   id: number;
@@ -10,6 +11,14 @@ type JwtPayload = {
   iat: number;
   exp: number;
 };
+
+// ── Access-Token Blacklist helpers ────────────────────────────────────────────
+// Key format: "blacklist:<token>" — TTL mirrors the access token lifetime (15 min).
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 900 s
+
+export function buildBlacklistKey(token: string): string {
+  return `blacklist:${token}`;
+}
 
 export const protect: RequestHandler = async (req, _res, next) => {
   try {
@@ -22,9 +31,18 @@ export const protect: RequestHandler = async (req, _res, next) => {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET is missing from environment');
 
+    // ── 1. Fast Redis blacklist check ──────────────────────────────────────
+    // This runs BEFORE jwt.verify so we short-circuit immediately for logged-out
+    // tokens without wasting CPU on signature verification.
+    const isBlacklisted = await cache.exists(buildBlacklistKey(token));
+    if (isBlacklisted) {
+      return next(new appError('Token has been invalidated. Please log in again.', 401));
+    }
+
+    // ── 2. Verify JWT signature and expiry ─────────────────────────────────
     const decoded = jwt.verify(token, secret) as JwtPayload;
 
-    // ── Cache-first lookup: avoids a DB round-trip on every request ───────────
+    // ── 3. Cache-first lookup: avoids a DB round-trip on every request ──────
     let cached = getCachedUser(decoded.id);
 
     if (!cached) {
@@ -47,14 +65,14 @@ export const protect: RequestHandler = async (req, _res, next) => {
       cached = getCachedUser(decoded.id)!;
     }
 
-    // ── Security checks using cached data ──────────────────────────────────────
+    // ── 4. Security checks using cached data ───────────────────────────────
 
-    // 1. Account must be active
+    // Account must be active
     if (!cached.is_active) {
       return next(new appError('This account is deactivated', 403));
     }
 
-    // 2. Token must have been issued AFTER the last password change
+    // Token must have been issued AFTER the last password change
     if (cached.password_change_at) {
       const changedTimestamp = Math.floor(
         new Date(cached.password_change_at).getTime() / 1000,
@@ -93,4 +111,6 @@ export const restrictTo = (...roles: string[]): RequestHandler => {
     next();
   };
 };
+
+export { ACCESS_TOKEN_TTL_SECONDS };
 

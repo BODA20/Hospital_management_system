@@ -12,17 +12,6 @@ export const createNurseSchema = z.object({
     .int('department_id must be an integer')
     .positive('department_id must be a positive integer'),
 
-  doctor_id: z
-    .number({ error: 'doctor_id must be a number' })
-    .int('doctor_id must be an integer')
-    .positive('doctor_id must be a positive integer'),
-
-  license_number: z
-    .string({ error: 'license_number must be a string' })
-    .min(3, 'license_number must be at least 3 characters')
-    .max(50, 'license_number cannot exceed 50 characters')
-    .trim(),
-
   shift: z.enum(['morning', 'evening', 'night'] as const, {
     error: 'shift must be one of: morning, evening, night',
   }),

@@ -18,3 +18,7 @@ stripe.exe
 
 dist
 logs
+test_login.ts
+
+test_output_phase1.log
+test_output.log

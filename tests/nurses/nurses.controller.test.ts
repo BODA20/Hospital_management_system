@@ -21,7 +21,7 @@ import { mockedDoctorsRepo as mDoctor, makeDoctor as mkDoctor } from '../mocks/d
 import { mockedUsersRepo as mUser, makeUser as mkUser } from '../mocks/usersRepo.mock';
 import { bearerHeader as auth, loginAs } from '../mocks/jwt.mock';
 
-const body = () => ({user_id:200,department_id:10,doctor_id:50,license_number:'LIC-001',shift:'morning',years_of_experience:3,notes:'Test nurse'});
+const body = () => ({user_id:200,department_id:10,shift:'morning',years_of_experience:3,notes:'Test nurse'});
 
 describe('NURSES API CONTROLLER', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -60,19 +60,6 @@ describe('NURSES API CONTROLLER', () => {
       it('[RBAC-008] Patient -> 403', async () => { loginAs(mkUser({role:'patient'})); expect((await request(app).delete('/api/v1/nurses/100').set(auth())).status).toBe(403); });
       it('[RBAC-009] Doctor -> 403', async () => { loginAs(mkUser({role:'doctor'})); expect((await request(app).delete('/api/v1/nurses/100').set(auth())).status).toBe(403); });
       it('[RBAC-010] Nurse -> 403', async () => { loginAs(mkUser({role:'nurse'})); expect((await request(app).delete('/api/v1/nurses/100').set(auth())).status).toBe(403); });
-    });
-    describe('GET /api/v1/nurses/my-team - doctor only', () => {
-      it('[RBAC-011] Admin -> 403', async () => { loginAs(mkUser({role:'admin'})); expect((await request(app).get('/api/v1/nurses/my-team').set(auth())).status).toBe(403); });
-      it('[RBAC-012] Patient -> 403', async () => { loginAs(mkUser({role:'patient'})); expect((await request(app).get('/api/v1/nurses/my-team').set(auth())).status).toBe(403); });
-      it('[RBAC-013] Nurse -> 403', async () => { loginAs(mkUser({role:'nurse'})); expect((await request(app).get('/api/v1/nurses/my-team').set(auth())).status).toBe(403); });
-      it('[RBAC-014] Doctor can access /my-team -> 200', async () => {
-        loginAs(mkUser({id:5,role:'doctor'}));
-        mDoctor.findByUserId.mockResolvedValue(mkDoctor({user_id:5}) as any);
-        mNurse.getNursesByDoctor.mockResolvedValue([mkNurse(),mkNurse({id:101})] as any);
-        const res = await request(app).get('/api/v1/nurses/my-team').set(auth());
-        expect(res.status).toBe(200);
-        expect(res.body.data.nurses).toHaveLength(2);
-      });
     });
   });
 
@@ -151,8 +138,7 @@ describe('NURSES API CONTROLLER', () => {
     it('[VAL-002] missing user_id -> 400', async () => { const {user_id:_u,...r}=body(); expect((await request(app).post('/api/v1/nurses').set(auth()).send(r)).status).toBe(400); });
     it('[VAL-003] invalid shift -> 400', async () => { expect((await request(app).post('/api/v1/nurses').set(auth()).send({...body(),shift:'afternoon'})).status).toBe(400); });
     it('[VAL-004] negative years_of_experience -> 400', async () => { expect((await request(app).post('/api/v1/nurses').set(auth()).send({...body(),years_of_experience:-5})).status).toBe(400); });
-    it('[VAL-005] license too short -> 400', async () => { expect((await request(app).post('/api/v1/nurses').set(auth()).send({...body(),license_number:'AB'})).status).toBe(400); });
-    it('[VAL-006] license too long -> 400', async () => { expect((await request(app).post('/api/v1/nurses').set(auth()).send({...body(),license_number:'A'.repeat(51)})).status).toBe(400); });
+
     it('[VAL-007] string user_id -> 400', async () => { expect((await request(app).post('/api/v1/nurses').set(auth()).send({...body(),user_id:'NaN'})).status).toBe(400); });
     it('[VAL-008] notes > 1000 chars -> 400', async () => { expect((await request(app).post('/api/v1/nurses').set(auth()).send({...body(),notes:'X'.repeat(1001)})).status).toBe(400); });
     it('[VAL-011] PATCH invalid shift -> 400', async () => { expect((await request(app).patch('/api/v1/nurses/100').set(auth()).send({shift:'INVALID_SHIFT'})).status).toBe(400); });

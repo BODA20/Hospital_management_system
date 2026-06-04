@@ -2,6 +2,8 @@
 volumes:
   postgres_data:
     driver: local
+  redis_data:
+    driver: local
 
 # ── Services ─────────────────────────────────────────────────────────────────
 services:
@@ -34,12 +36,35 @@ services:
       retries: 5
       start_period: 20s
 
+  # ── Redis Cache & Token Blacklist ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: hospital_redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      # Persist Redis AOF/RDB snapshots so the blacklist survives restarts
+      - redis_data:/data
+
+    # Enable AOF persistence so data survives container restarts
+    command: redis-server --appendonly yes
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # ── Backend Application ───────────────────────────────────────────────────
   app:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production       # Always build the lean production stage
+      target: development       # Always build the lean production stage
     container_name: hospital_app
     restart: unless-stopped
 
@@ -50,16 +75,22 @@ services:
     # Override / supplement specific variables to use the Docker service name
     # as the DB host instead of 'localhost'.
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DB_HOST: db               # ← must match the service name above
       DB_PORT: 5432
+      REDIS_URL: redis://redis:6379
 
     ports:
       - "${PORT:-3000}:3000"
 
-    # Do NOT start the app until PostgreSQL passes its healthcheck
+    volumes:
+      - .:/app
+      - /app/node_modules
+    # Do NOT start the app until both PostgreSQL and Redis pass their healthchecks
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
     # Optional: mount logs directory so you can inspect them on the host
