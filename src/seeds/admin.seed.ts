@@ -3,7 +3,7 @@ import db from '../config/db';
 import { UserRole } from '../modules/users/user.types';
 import logger from '../common/utils/logger';
 
-export async function seedAdmin() {
+export async function seed() {
   const existing = await db('users')
     .where({ email: 'bodadmin@system.com' })
     .first();

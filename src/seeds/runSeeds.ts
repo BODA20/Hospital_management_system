@@ -1,16 +1,16 @@
-import { seedUsers } from './users.seed';
-import { seedAdmin } from './admin.seed';
+import { Knex } from 'knex';
+import { seed as seedUsers } from './users.seed';
+import { seed as seedAdmin } from './admin.seed';
 import logger from '../common/utils/logger';
 
-async function run() {
+export async function seed(knex: Knex): Promise<void> {
   try {
+    logger.info('info: 🔄 Starting Comprehensive Database Reset...');
     await seedUsers();
     await seedAdmin();
-    process.exit(0);
+    logger.info('Database seeded successfully! 🎉');
   } catch (error) {
-    logger.error('Seed execution failed', { error: error instanceof Error ? error.message : error });
-    process.exit(1);
+    logger.error('Seed execution failed ❌', { error: error instanceof Error ? error.message : error });
+    throw error;
   }
 }
-
-run();

@@ -4,7 +4,7 @@ import { UserRole } from '../modules/users/user.types';
 import logger from '../common/utils/logger';
 import { faker } from '@faker-js/faker';
 
-export async function seedUsers() {
+export async function seed() {
   logger.info('🔄 Starting Comprehensive Database Reset...');
 
   try {
