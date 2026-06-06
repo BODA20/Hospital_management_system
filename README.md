@@ -1,6 +1,13 @@
 # 🏥 Hospital Management System
 
-A production-ready, RESTful backend system for managing hospital operations — including patient records, doctor assignments, appointment scheduling, visit tracking, and billing. Built with a security-first architecture featuring Redis-backed JWT session management and role-based access control.
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)
+
+A comprehensive, RESTful backend system for managing hospital operations — including patient records, doctor assignments, appointment scheduling, visit tracking, and billing. Built with a security-first architecture featuring Redis-backed JWT session management and role-based access control.
 
 ---
 
@@ -37,6 +44,17 @@ A production-ready, RESTful backend system for managing hospital operations — 
 - **Containerized Deployment** — Multi-stage Docker build with Docker Compose for zero-configuration local and production environments
 - **Database Migrations** — Version-controlled schema evolution with Knex.js
 
+## Security Features
+
+- **JWT Authentication** — Stateless authentication using short-lived access tokens.
+- **Refresh Token Rotation** — Long-lived refresh tokens stored securely to issue new access tokens without requiring re-authentication.
+- **Redis Token Blacklisting** — Revoked or logged-out tokens are immediately added to a Redis blacklist to prevent unauthorized access.
+- **Role-Based Access Control (RBAC)** — Strict authorization checks at the route level to ensure users only access permitted resources based on their role (`admin`, `doctor`, `nurse`, `patient`).
+- **Password Hashing with bcrypt** — Passwords are securely hashed and salted before storage.
+- **Zod Validation** — Rigorous runtime type checking and input sanitization on all incoming request payloads.
+- **Environment Variable Isolation** — Sensitive secrets and configuration are kept out of the codebase using `.env` files.
+- **Token Expiration Policies** — Ephemeral data (like password reset and email verification tokens) is configured with strict Time-To-Live (TTL) values in Redis.
+
 ---
 
 ## Tech Stack
@@ -60,29 +78,95 @@ A production-ready, RESTful backend system for managing hospital operations — 
 
 ## Architecture Overview
 
-```
-Client
-  │
-  ▼
-Express Router
-  │
-  ├── protect middleware  ──► Redis (token blacklist check)
-  │
-  ├── RBAC middleware
-  │
-  └── Controller
-        │
-        ├── Service (business logic)
-        │     │
-        │     ├── PostgreSQL (persistent data via Knex)
-        │     └── Redis (ephemeral tokens, sessions, blacklist)
-        │
-        └── Response
+```mermaid
+graph TD
+    Client[Client Application] -->|HTTP/REST| API[Express API Router]
+    
+    subgraph Backend Services
+        API --> Auth[Authentication Layer]
+        Auth --> Logic[Business Logic Layer]
+    end
+    
+    subgraph Data Layer
+        Logic -->|Persistent Data| Postgres[(PostgreSQL)]
+        Logic -->|Ephemeral State| Redis[(Redis Cache)]
+    end
+    
+    subgraph External Services
+        Logic -->|Payment Intents| Stripe[Stripe API]
+        Logic -->|Transactional Emails| Email[Email Service]
+    end
 ```
 
-- **Redis** handles all ephemeral, time-sensitive state (JWT blacklist, password reset tokens, refresh tokens).
-- **PostgreSQL** owns all persistent business data (users, appointments, billing, visits).
-- The `protect` middleware validates tokens against the Redis blacklist **before** any database call, keeping hot paths fast.
+The system employs a layered architecture separating concerns between routing, authentication, business logic, and data access. Redis acts as a high-speed cache for session state and blacklists, while PostgreSQL serves as the primary source of truth for persistent business records.
+
+### Request Lifecycle
+
+```mermaid
+flowchart TD
+    A[Client Request] --> B[Express Router]
+    B --> C{Authentication Middleware}
+    C -->|Token Valid| D{Redis Blacklist Check}
+    D -->|Not Blacklisted| E{RBAC Middleware}
+    E -->|Authorized| F[Controller]
+    F --> G[Service Layer]
+    G --> H[(PostgreSQL / Redis)]
+    H --> I[Response]
+    I --> J[Client]
+    
+    C -.->|Invalid Token| 401[401 Unauthorized]
+    D -.->|Blacklisted| 401
+    E -.->|Unauthorized Role| 403[403 Forbidden]
+```
+
+### Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API
+    participant Redis
+    
+    User->>API: POST /login (credentials)
+    API->>API: Validate Credentials (bcrypt)
+    API->>API: Generate Access JWT (15m)
+    API->>API: Generate Refresh Token (7d)
+    API->>Redis: Store Refresh Token / Session
+    API-->>User: Return Tokens
+    
+    User->>API: GET /protected (Bearer Token)
+    API->>Redis: Check Blacklist
+    Redis-->>API: Token Valid
+    API->>API: Verify JWT Signature
+    API-->>User: 200 OK (Protected Data)
+    
+    User->>API: POST /logout
+    API->>Redis: Add Token to Blacklist
+    API-->>User: 200 OK (Logged Out)
+```
+
+### Password Reset Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant API
+    participant Redis
+    participant Email Service
+    
+    User->>API: POST /forgot-password (email)
+    API->>API: Generate Reset Token
+    API->>Redis: Store Token (TTL: 1h)
+    API->>Email Service: Send Email with Reset Link
+    Email Service-->>User: Deliver Reset Email
+    
+    User->>API: POST /reset-password (token, new_password)
+    API->>Redis: Validate Token & Retrieve User ID
+    API->>API: Hash new_password
+    API->>API: Update User in Database
+    API->>Redis: Invalidate Reset Token
+    API-->>User: 200 OK (Password Updated)
+```
 
 ---
 
@@ -125,7 +209,18 @@ The server will start on `http://localhost:5000`.
 
 ## Running with Docker
 
-The entire stack (app + PostgreSQL + Redis) can be spun up with a single command.
+The entire stack (app + PostgreSQL + Redis) can be spun up with a single command within an isolated Docker network.
+
+```mermaid
+graph TD
+    Client[Client / Developer] -->|Port 5000| Network[Docker Network]
+    
+    subgraph Docker Infrastructure
+        Network --> API[API Container: Node.js]
+        API -->|Port 5432| DB[PostgreSQL Container]
+        API -->|Port 6379| Cache[Redis Container]
+    end
+```
 
 ```bash
 # 1. Copy and configure the environment file
@@ -276,6 +371,27 @@ hospital-management-system/
 
 ## Database Schema
 
+```mermaid
+erDiagram
+    users ||--o{ patients : "is a"
+    users ||--o{ doctors : "is a"
+    users ||--o{ nurses : "is a"
+    users ||--o{ staff_requests : creates
+    
+    departments ||--o{ doctors : employs
+    departments ||--o{ nurses : employs
+    
+    doctors ||--o{ appointments : accepts
+    patients ||--o{ appointments : books
+    
+    doctors ||--o{ visits : attends
+    patients ||--o{ visits : undergoes
+    appointments ||--o| visits : results_in
+    
+    patients ||--o{ billing : receives
+    visits ||--o| billing : generates
+```
+
 The schema is managed entirely through Knex migrations. Core tables:
 
 ```
@@ -309,6 +425,17 @@ staff_requests    ──► users
 ```
 
 > Ephemeral data (refresh tokens, password reset tokens, email verification tokens) is stored in **Redis** with TTL — not in the database.
+
+---
+
+## API Testing (Postman)
+
+A complete Postman collection is available for testing the API endpoints, including pre-configured environment variables for authentication and routing.
+
+1. Navigate to the `/docs` or `/postman` folder in this repository.
+2. Import the `Hospital_Management_System.postman_collection.json` file into Postman.
+3. Import the `Hospital_Management_System_Local.postman_environment.json` environment file.
+4. Set the environment as active, register a user, log in to receive your JWT, and set it as your `Bearer Token` for subsequent requests.
 
 ---
 
