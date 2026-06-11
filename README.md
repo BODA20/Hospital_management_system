@@ -5,7 +5,6 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?style=flat-square&logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)
 
 A comprehensive, RESTful backend system for managing hospital operations — including patient records, doctor assignments, appointment scheduling, visit tracking, and billing. Built with a security-first architecture featuring Redis-backed JWT session management and role-based access control.
 
