@@ -37,7 +37,7 @@ services:
       start_period: 20s
 
   # ── Redis Cache & Token Blacklist ─────────────────────────────────────────
-  redis:
+  cache:
     image: redis:7-alpine
     container_name: hospital_redis
     restart: unless-stopped
@@ -78,7 +78,8 @@ services:
       NODE_ENV: development
       DB_HOST: db               # ← must match the service name above
       DB_PORT: 5432
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://cache:6379
+      REDIS_HOST: cache
 
     ports:
       - "${PORT:-3000}:3000"
@@ -90,7 +91,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
+      cache:
         condition: service_healthy
 
     # Optional: mount logs directory so you can inspect them on the host

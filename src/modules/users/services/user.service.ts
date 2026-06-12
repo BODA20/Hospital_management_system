@@ -8,7 +8,8 @@ import { appError } from '../../../common/errors/AppError';
 import * as userRepo from '../repositories/user.repo';
 import * as doctorRepo from '../../doctors/repositories/doctor.repo';
 import db from '../../../config/db';
-import { invalidateUserCache } from '../../../common/utils/userCache';
+import * as cache from '../../../common/services/redisCache.service';
+import { buildAuthUserKey } from '../../../common/middleware/auth';
 
 export const getAllUsers = async () => {
   const users = await userRepo.findAllUsers();
@@ -34,7 +35,7 @@ export const updateProfile = async (
 ) => {
   const user = await userRepo.updateUserById(userId, data);
   // Invalidate cache on profile update as well just in case (e.g. name change in logs/audit)
-  invalidateUserCache(userId);
+  await cache.del(buildAuthUserKey(userId));
   return stripSensitive(user);
 };
 
@@ -47,7 +48,7 @@ export const deactivateUser = async (id: number) => {
 
   const user = await userRepo.deactivateUser(id);
   // CRITICAL: Invalidate cache so they are blocked on the next request
-  invalidateUserCache(id);
+  await cache.del(buildAuthUserKey(id));
   return stripSensitive(user);
 };
 
@@ -88,7 +89,7 @@ export const adminUpdateUser = async (
   }
 
   // Invalidate cache if role or active status changed
-  invalidateUserCache(id);
+  await cache.del(buildAuthUserKey(id));
   return stripSensitive(result);
 };
 

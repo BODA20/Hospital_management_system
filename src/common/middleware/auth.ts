@@ -2,8 +2,14 @@ import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { appError } from '../errors/AppError';
 import * as usersRepo from '../../modules/users/repositories/user.repo';
-import { getCachedUser, setCachedUser } from '../utils/userCache';
 import * as cache from '../services/redisCache.service';
+
+export type CachedAuthUser = {
+  id: number;
+  role: string;
+  is_active: boolean;
+  password_change_at: Date | null | undefined;
+};
 
 type JwtPayload = {
   id: number;
@@ -18,6 +24,10 @@ const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 900 s
 
 export function buildBlacklistKey(token: string): string {
   return `blacklist:${token}`;
+}
+
+export function buildAuthUserKey(userId: number): string {
+  return `auth_user:${userId}`;
 }
 
 export const protect: RequestHandler = async (req, _res, next) => {
@@ -43,7 +53,7 @@ export const protect: RequestHandler = async (req, _res, next) => {
     const decoded = jwt.verify(token, secret) as JwtPayload;
 
     // ── 3. Cache-first lookup: avoids a DB round-trip on every request ──────
-    let cached = getCachedUser(decoded.id);
+    let cached = await cache.get<CachedAuthUser>(buildAuthUserKey(decoded.id));
 
     if (!cached) {
       // Cache miss — fetch minimal auth fields from DB and populate cache
@@ -55,14 +65,14 @@ export const protect: RequestHandler = async (req, _res, next) => {
         );
       }
 
-      setCachedUser({
+      cached = {
         id: dbUser.id,
         role: dbUser.role,
         is_active: dbUser.is_active,
         password_change_at: dbUser.password_change_at,
-      });
+      };
 
-      cached = getCachedUser(decoded.id)!;
+      await cache.set(buildAuthUserKey(decoded.id), cached, 60); // 60 seconds TTL
     }
 
     // ── 4. Security checks using cached data ───────────────────────────────

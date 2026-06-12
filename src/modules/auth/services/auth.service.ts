@@ -10,9 +10,8 @@ import { Email } from '../../../common/utils/email';
 import * as sessionService from './session.service';
 import db from '../../../config/db';
 import * as patientRepo from '../../patients/repositories/patient.repository';
-import { invalidateUserCache } from '../../../common/utils/userCache';
 import * as cache from '../../../common/services/redisCache.service';
-import { buildBlacklistKey, ACCESS_TOKEN_TTL_SECONDS } from '../../../common/middleware/auth';
+import { buildBlacklistKey, buildAuthUserKey, ACCESS_TOKEN_TTL_SECONDS } from '../../../common/middleware/auth';
 
 function signToken(payload: { id: number; role: string }) {
   const secret = process.env.JWT_SECRET;
@@ -173,8 +172,8 @@ export const resetPassword = async (token: string, newPassword: string) => {
   // Explicitly delete the Redis key so the token cannot be replayed
   await cache.del(buildResetKey(hashedToken));
 
-  // Invalidate the in-memory user cache so the new password_change_at takes effect
-  invalidateUserCache(payload.userId);
+  // Invalidate the user cache so the new password_change_at takes effect
+  await cache.del(buildAuthUserKey(payload.userId));
 };
 
 const EMAIL_CHANGE_TTL_SECONDS = 60 * 60; // 1 hour
@@ -267,6 +266,6 @@ export async function changePassword(userId: number, dto: ChangePasswordDTO) {
   await sessionService.revokeAllUserSessions(userId);
 
   // Invalidate cache so the new password_change_at takes effect immediately
-  invalidateUserCache(userId);
+  await cache.del(buildAuthUserKey(userId));
 }
 
