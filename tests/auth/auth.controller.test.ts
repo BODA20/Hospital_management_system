@@ -19,13 +19,25 @@ jest.mock('../../src/common/utils/email', () => ({
   })),
 }));
 
-jest.mock('../../src/config/db', () => ({
-  __esModule: true,
-  default: {
-    transaction: jest.fn().mockImplementation(async (callback: Function) => callback({})),
-    fn: { now: jest.fn().mockReturnValue(new Date()) },
-  },
-}));
+jest.mock('../../src/config/db', () => {
+  const mockTrx = Object.assign(
+    jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      update: jest.fn().mockResolvedValue(1),
+    }),
+    {}
+  );
+  return {
+    __esModule: true,
+    default: Object.assign(
+      jest.fn(),
+      {
+        transaction: jest.fn().mockImplementation(async (callback: Function) => callback(mockTrx)),
+        fn: { now: jest.fn().mockReturnValue(new Date()) },
+      }
+    ),
+  };
+});
 
 jest.mock('../../src/modules/users/repositories/user.repo', () => require('../mocks/usersRepo.mock').mockedUsersRepo);
 jest.mock('../../src/modules/patients/repositories/patient.repository', () => require('../mocks/patientsRepo.mock').mockedPatientRepo);
@@ -44,6 +56,7 @@ const VALID_SIGNUP_BODY = {
   email: 'jane.doe@example.com',
   password: 'SecurePass1!',
   role: 'patient' as const,
+  phone: '+1234567890',
 };
 
 const VALID_LOGIN_BODY = {
@@ -85,6 +98,9 @@ describe('AUTH API CONTROLLER', () => {
       jest.clearAllMocks();
       mockedUsersRepo.findUserByEmail.mockResolvedValue(undefined);
       mockedUsersRepo.createUser.mockResolvedValue(MOCK_PUBLIC_USER as any);
+      if (mockedUsersRepo.findUserByIdWithDepartment) {
+        mockedUsersRepo.findUserByIdWithDepartment.mockResolvedValue({ id: 1, department_id: null, department_name: null } as any);
+      }
       if (mockedPatientRepo.createBasePatient) {
         mockedPatientRepo.createBasePatient.mockResolvedValue(MOCK_PATIENT as any);
       }
@@ -132,18 +148,18 @@ describe('AUTH API CONTROLLER', () => {
         expect(res.status).toBe(400);
       });
 
-      it('should return 400 when phone is too short (< 10 characters)', async () => {
-        const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, phone: '123456789' });
+      it('should return 400 when phone is too short (< 7 characters)', async () => {
+        const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, phone: '12345' });
         expect(res.status).toBe(400);
         expect(res.body.message).toBe('Validation Error');
-        expect(res.body.errors[0].message).toMatch(/phone must be at least 10 characters/i);
+        expect(res.body.errors[0].message).toMatch(/must be at least 7 digits/i);
       });
 
       it('should return 400 when phone contains invalid characters', async () => {
-        const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, phone: '123-456-7890' });
+        const res = await request(app).post('/api/v1/auth/signup').send({ ...VALID_SIGNUP_BODY, phone: 'abc-def-ghijk' });
         expect(res.status).toBe(400);
         expect(res.body.message).toBe('Validation Error');
-        expect(res.body.errors[0].message).toMatch(/phone must contain only digits/i);
+        expect(res.body.errors[0].message).toMatch(/valid number/i);
       });
     });
 

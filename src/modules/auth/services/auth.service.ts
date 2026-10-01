@@ -10,6 +10,9 @@ import { Email } from '../../../common/utils/email';
 import * as sessionService from './session.service';
 import db from '../../../config/db';
 import * as patientRepo from '../../patients/repositories/patient.repository';
+import * as doctorRepo from '../../doctors/repositories/doctor.repo';
+import * as nurseRepo from '../../nurses/repositories/nurse.repository';
+import { UserRole } from '../../users/user.types';
 import * as cache from '../../../common/services/redisCache.service';
 import { buildBlacklistKey, buildAuthUserKey, ACCESS_TOKEN_TTL_SECONDS } from '../../../common/middleware/auth';
 
@@ -17,9 +20,11 @@ function signToken(payload: { id: number; role: string }) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET not defined');
 
-  return jwt.sign(payload, secret, {
-    expiresIn: '15m',
-  });
+  // Read expiry from env so changing JWT_EXPIRES_IN in .env takes effect immediately.
+  // Falls back to '7d' if the variable is missing to prevent accidental ultra-short tokens.
+  const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'];
+
+  return jwt.sign(payload, secret, { expiresIn });
 }
 
 export async function refresh(refreshToken: string) {
@@ -42,12 +47,23 @@ export async function refresh(refreshToken: string) {
   };
 }
 
+const OTP_TTL_SECONDS = 10 * 60; // 10 minutes TTL
+
 export async function signup(dto: SignupDTO) {
   const existing = await usersRepo.findUserByEmail(dto.email);
-  if (existing) throw new appError('Email already in use', 409);
+  if (existing) {
+    if (existing.is_verified === false) {
+      const err: any = new appError('Account already registered but pending verification', 409);
+      err.requiresVerification = true;
+      throw err;
+    }
+    throw new appError('Email already in use', 409);
+  }
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
   const password_hash = await bcrypt.hash(dto.password, rounds);
+
+  const role = dto.role ? (dto.role as UserRole) : UserRole.PATIENT;
 
   const user = await db.transaction(async (trx) => {
     const newUser = await usersRepo.createUser(
@@ -56,17 +72,109 @@ export async function signup(dto: SignupDTO) {
         email: dto.email,
         password_hash,
         phone: dto.phone,
+        role,
       },
       trx,
     );
 
-    await patientRepo.createBasePatient(newUser.id, trx);
+    // Set initial registration verification state to false in DB
+    await (trx('users') as any).where({ id: newUser.id }).update({ is_verified: false });
+
+    if (role === UserRole.PATIENT) {
+      await patientRepo.createBasePatient(newUser.id, trx);
+    } else if (role === UserRole.DOCTOR) {
+      await doctorRepo.createDoctor({
+        user_id: newUser.id,
+        specialization: 'General',
+        consultation_fee: 0,
+        years_of_experience: 0,
+        bio: '',
+        department_id: null as any,
+      }, trx);
+    } else if (role === UserRole.NURSE) {
+      const rawShift = (dto as any).shift || (dto as any).assigned_shift || (dto as any).requested_shift || 'morning';
+      const cleanShift: 'morning' | 'evening' | 'night' = String(rawShift).toLowerCase().includes('night')
+        ? 'night'
+        : String(rawShift).toLowerCase().includes('evening')
+        ? 'evening'
+        : 'morning';
+      await nurseRepo.createNurse({
+        user_id: newUser.id,
+        shift: cleanShift,
+        years_of_experience: 0,
+        notes: '',
+        department_id: null as any,
+      }, trx);
+    }
+
     return newUser;
   });
 
+  // Generate a 6-digit cryptographic OTP code
+  const otp = crypto.randomInt(100000, 999999).toString();
+
+  // Store in Redis with 10-minute TTL (600s)
+  await cache.set(`otp:${dto.email}`, { otp, userId: user.id }, OTP_TTL_SECONDS);
+
+  // Trigger Emailer non-blocking & log OTP in dev mode
+  setImmediate(async () => {
+    try {
+      console.log(`[DEV OTP LOG] Verification OTP code for ${dto.email}: ${otp}`);
+      await new Email({ email: dto.email, name: dto.full_name }, '').sendOTP(otp);
+    } catch (err: any) {
+      console.error('[OTP Mailer Error]:', err?.message ?? err);
+    }
+  });
+
   return {
-    message: 'User created successfully, please log in',
-    user,
+    message: 'User registered successfully. An OTP verification code has been sent to your email.',
+    user: { ...user, is_verified: false },
+    otpRequired: true,
+  };
+}
+
+export async function verifyOTP(email: string, otp: string) {
+  const cachedData = await cache.get<{ otp: string; userId: number }>(`otp:${email}`);
+  if (!cachedData || cachedData.otp !== otp.trim()) {
+    throw new appError('Invalid or expired OTP code', 400);
+  }
+
+  await (db('users') as any)
+    .where({ id: cachedData.userId })
+    .update({ is_verified: true, is_active: true });
+
+  await cache.del(`otp:${email}`);
+  await cache.del(buildAuthUserKey(cachedData.userId));
+
+  return {
+    message: 'Email verified successfully. Account activated.',
+  };
+}
+
+export async function resendOTP(email: string) {
+  const user = await usersRepo.findUserByEmail(email);
+  if (!user) {
+    throw new appError('User account not found with this email', 404);
+  }
+
+  // Generate a new 6-digit cryptographic OTP code
+  const otp = crypto.randomInt(100000, 999999).toString();
+
+  // Refresh key in Redis with 10-minute TTL (600s)
+  await cache.set(`otp:${email}`, { otp, userId: user.id }, OTP_TTL_SECONDS);
+
+  // Trigger Emailer non-blocking
+  setImmediate(async () => {
+    try {
+      console.log(`[DEV OTP LOG] Resent OTP code for ${email}: ${otp}`);
+      await new Email({ email: user.email, name: user.full_name }, '').sendOTP(otp);
+    } catch (err: any) {
+      console.error('[DEV OTP LOG Error]:', err?.message ?? err);
+    }
+  });
+
+  return {
+    message: 'A new verification OTP code has been sent to your email address.',
   };
 }
 
@@ -86,7 +194,14 @@ export async function login(
 
   if (!user.is_active) throw new appError('Account is deactivated', 403);
 
-  const ok = await bcrypt.compare(dto.password, user.password_hash);
+  if (user.is_verified === false) {
+    const err: any = new appError('Please verify your email address first', 403);
+    err.requiresVerification = true;
+    throw err;
+  }
+
+  const rawPassword = dto.password ? String(dto.password).trim() : '';
+  const ok = await bcrypt.compare(rawPassword, user.password_hash);
   console.log('[DEBUG LOGIN] bcrypt.compare result for', dto.email, ':', ok);
 
   if (!ok) throw new appError('Invalid email or password', 401);
@@ -96,14 +211,18 @@ export async function login(
   const { refreshToken } = await sessionService.createSession(user.id);
 
 
-  const publicUser: PublicUser = {
+  const userWithDept = await usersRepo.findUserByIdWithDepartment(user.id);
+
+  const publicUser: any = {
     id: user.id,
     full_name: user.full_name,
     email: user.email,
-    role: user.role,
+    phone: user.phone || userWithDept?.phone || null,
+    role: user.role as UserRole,
     is_active: user.is_active,
     created_at: user.created_at,
-    phone: user.phone,
+    department_id: userWithDept?.department_id,
+    department_name: userWithDept?.department_name,
   };
 
   return { accessToken, refreshToken, user: publicUser };
@@ -142,7 +261,7 @@ export const forgotPassword = async (email: string) => {
     PASSWORD_RESET_TTL_SECONDS,
   );
 
-  const resetURL = `${process.env.APP_URL}/reset-password/${resetToken}`;
+  const resetURL = `${process.env.FRONTEND_URL ?? process.env.APP_URL}/reset-password/${resetToken}`;
 
   await new Email(
     { email: user.email, name: user.full_name },
@@ -174,6 +293,7 @@ export const resetPassword = async (token: string, newPassword: string) => {
 
   // Invalidate the user cache so the new password_change_at takes effect
   await cache.del(buildAuthUserKey(payload.userId));
+  return { userId: payload.userId };
 };
 
 const EMAIL_CHANGE_TTL_SECONDS = 60 * 60; // 1 hour
@@ -223,11 +343,7 @@ export const verifyNewEmail = async (token: string) => {
  * @param refreshToken - The opaque refresh token from the client body.
  * @param accessToken  - The raw Bearer token from the Authorization header.
  */
-export async function logout(refreshToken: string, accessToken: string) {
-  if (!refreshToken) {
-    throw new appError('Refresh token is required', 400);
-  }
-
+export async function logout(refreshToken?: string, accessToken?: string) {
   // 1. Blacklist the access token so it is rejected by the protect middleware
   //    immediately, even before it expires naturally.
   if (accessToken) {
@@ -239,7 +355,9 @@ export async function logout(refreshToken: string, accessToken: string) {
   }
 
   // 2. Revoke the refresh token from the DB so it cannot be rotated.
-  await sessionService.revokeSession(refreshToken);
+  if (refreshToken) {
+    await sessionService.revokeSession(refreshToken);
+  }
 
   return { message: 'Logged out successfully' };
 }
@@ -250,17 +368,18 @@ export async function changePassword(userId: number, dto: ChangePasswordDTO) {
     throw new appError('User not found', 404);
   }
 
-  const ok = await bcrypt.compare(dto.currentPassword, user.password_hash);
+  const currentPasswordRaw = dto.current_password ? String(dto.current_password).trim() : '';
+  const ok = await bcrypt.compare(currentPasswordRaw, user.password_hash);
   if (!ok) {
     throw new appError('Current password is incorrect', 401);
   }
 
-  if (dto.currentPassword === dto.newPassword) {
+  if (dto.current_password === dto.new_password) {
     throw new appError('New password must be different', 400);
   }
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
-  const hashedPassword = await bcrypt.hash(dto.newPassword, rounds);
+  const hashedPassword = await bcrypt.hash(dto.new_password, rounds);
 
   await authRepo.changepassword(userId, hashedPassword);
   await sessionService.revokeAllUserSessions(userId);

@@ -1,5 +1,7 @@
 import * as patientRepo from '../repositories/patient.repository';
 import * as usersRepo from '../../users/repositories/user.repo';
+import * as appoRepo from '../../appointments/repositories/appo.repo';
+import db from '../../../config/db';
 import { appError } from '../../../common/errors/AppError';
 import type {
   CreatePatientInput,
@@ -94,11 +96,18 @@ export const getMyProfile = async (userId: number) => {
 
 // ─── Update Patient ────────────────────────────────────────────────────────────
 export const updatePatient = async (id: number, body: UpdatePatientInput) => {
-  await getPatientById(id);
+  const existing = await getPatientById(id);
 
-  // DB UNIQUE constraint on patients.phone handles duplicate phone conflicts.
-  // The errorHandler catches pg error 23505 and returns a clean 409 response.
   await patientRepo.updatePatient(id, body);
+
+  if (body.phone || (body as any).full_name || (body as any).email) {
+    const userUpdates: Record<string, any> = {};
+    if (body.phone) userUpdates.phone = body.phone;
+    if ((body as any).full_name) userUpdates.full_name = (body as any).full_name;
+    if ((body as any).email) userUpdates.email = (body as any).email;
+    await db('users').where({ id: existing.user_id }).update(userUpdates);
+  }
+
   const updated = await patientRepo.findById(id);
   return withAge(updated as PatientProfile);
 };
@@ -121,16 +130,60 @@ export const getPatientAppointments = async (patientId: number) => {
   };
 };
 
-// ─── Get My Appointments (Patient logged in) ───────────────────────────────────
+// ─── Get My Appointments (Patient logged in) — with Live Queue Stats ──────────
 export const getMyAppointments = async (userId: number) => {
   const patient = await patientRepo.findByUserId(userId);
   if (!patient) {
     throw new appError('Patient profile not found for this user', 404);
   }
   const appointments = await patientRepo.getPatientAppointments(patient.id);
+
+  // Enrich each appointment with live queue stats if it has a queue_number
+  const enriched = await Promise.all(
+    appointments.map(async (appt: any) => {
+      if (!appt.queue_number) {
+        return { ...appt, queue_stats: null };
+      }
+
+      // Determine the appointment date string (YYYY-MM-DD)
+      const apptDateStr =
+        appt.appointment_date ??
+        (appt.starts_at ? new Date(appt.starts_at).toISOString().split('T')[0] : null);
+
+      if (!apptDateStr) {
+        return { ...appt, queue_stats: null };
+      }
+
+      const currentServingNumber = await appoRepo.getCurrentServingNumber(
+        appt.doctor_id,
+        apptDateStr,
+      );
+
+      const myQueueNumber: number = appt.queue_number;
+      const patientsAhead =
+        currentServingNumber !== null
+          ? Math.max(0, myQueueNumber - currentServingNumber - 1)
+          : Math.max(0, myQueueNumber - 1);
+
+      return {
+        ...appt,
+        queue_stats: {
+          my_queue_number: myQueueNumber,
+          current_serving_number: currentServingNumber,
+          patients_ahead: patientsAhead,
+        },
+      };
+    }),
+  );
+
   return {
     patient_id: patient.id,
-    total: appointments.length,
-    appointments,
+    total: enriched.length,
+    appointments: enriched,
   };
 };
+
+export const getMyMedicalRecords = async (userId: number) => {
+  return patientRepo.getPatientMedicalRecords(userId);
+};
+

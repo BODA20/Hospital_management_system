@@ -24,6 +24,11 @@ export const vitalsSchema = z
       .positive('weight must be positive (kg)')
       .max(500, 'weight seems too high (kg)')
       .optional(),
+    respiratory_rate: z
+      .number()
+      .min(10, 'respiratory rate seems too low')
+      .max(60, 'respiratory rate seems too high')
+      .optional(),
   })
   .optional();
 

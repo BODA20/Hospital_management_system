@@ -67,3 +67,7 @@ export const deleteNurse = async (id: number) => {
   await nurseRepo.deleteNurse(id);
   return { message: 'Nurse profile deleted successfully' };
 };
+
+export const getVitalsQueue = async () => {
+  return nurseRepo.getVitalsQueue();
+};

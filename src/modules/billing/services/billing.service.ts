@@ -86,3 +86,64 @@ export const getInvoiceDetails = async (invoice_id: number, requesterId: number,
 
   return data;
 };
+
+export const getOrCreateInvoiceForCheckout = async (
+  rawId: number,
+  requesterId: number,
+  requesterRole: string,
+) => {
+  const db = (await import('../../../config/db')).default;
+
+  // 1. Try finding invoice by ID first
+  const existingInvoice = await billingRepo.getInvoiceById(rawId);
+  if (existingInvoice) {
+    return await getInvoiceDetails(existingInvoice.id, requesterId, requesterRole);
+  }
+
+  // 2. Try finding appointment by ID
+  const appointment = await db('appointments').where({ id: rawId }).first();
+  if (!appointment) {
+    throw new appError(`Invoice or Appointment with ID ${rawId} not found`, 404);
+  }
+
+  // 3. Check if an invoice already exists for this patient & appointment
+  let linkedInvoice = await db('invoices')
+    .where({ patient_id: appointment.patient_id })
+    .andWhere(function () {
+      this.where({ id: rawId });
+      if (appointment.id) {
+        this.orWhereRaw("visit_id IN (SELECT id FROM visits WHERE appointment_id = ?)", [appointment.id]);
+      }
+    })
+    .first();
+
+  if (!linkedInvoice) {
+    const doctor = await db('doctors').where({ id: appointment.doctor_id }).first();
+    const fee = doctor?.consultation_fee ? Number(doctor.consultation_fee) : 150;
+
+    const invoiceNo = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+    const [created] = await db('invoices')
+      .insert({
+        invoice_no: invoiceNo,
+        patient_id: appointment.patient_id,
+        total_amount: fee,
+        discount: 0,
+        tax: 0,
+        final_amount: fee,
+        status: 'pending',
+      })
+      .returning('*');
+
+    await db('invoice_items').insert({
+      invoice_id: created.id,
+      description: `Consultation Fee (${doctor?.specialization || 'Medical Specialist'})`,
+      quantity: 1,
+      unit_price: fee,
+      line_total: fee,
+    });
+
+    linkedInvoice = created;
+  }
+
+  return await getInvoiceDetails(linkedInvoice.id, requesterId, requesterRole);
+};

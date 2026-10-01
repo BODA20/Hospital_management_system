@@ -5,14 +5,24 @@ export const signupSchema = z
     full_name: z.string().trim().min(2).max(100),
     email: z.string().trim().toLowerCase().email(),
     password: passwordSchema,
-    role: z.enum(['admin', 'doctor', 'nurse', 'patient']),
+    role: z
+      .preprocess(
+        (val) => (typeof val === 'string' ? val.toLowerCase() : val),
+        z.enum(['admin', 'doctor', 'nurse', 'patient', 'receptionist'])
+      )
+      .optional()
+      .default('patient'),
     phone: z
       .string()
       .trim()
-      .regex(/^(\+)?\d+$/, 'Phone must contain only digits and an optional "+" prefix')
-      .min(10, 'Phone must be at least 10 characters')
+      .min(7, 'Phone number must be at least 7 digits')
       .max(20, 'Phone must be at most 20 characters')
-      .optional(),
+      .regex(
+        /^\+?[0-9][\s\-\(\)0-9]{6,19}$/,
+        'Phone must be a valid number (e.g. +1 555 000 0000)',
+      )
+      .optional()
+      .nullable(),
   })
   .strict();
 
@@ -25,8 +35,8 @@ export const loginSchema = z
 
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Current password is required'),
-    newPassword: passwordSchema,
+    current_password: z.string().min(1, 'Current password is required'),
+    new_password: passwordSchema,
   })
   .strict();
 export const forgotPasswordSchema = z
@@ -53,6 +63,19 @@ export const changeEmailSchema = z
   })
   .strict();
 
+export const verifyOtpSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email(),
+    otp: z.string().trim().length(6, 'OTP must be 6 digits'),
+  })
+  .strict();
+
+export const resendOtpSchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email(),
+  })
+  .strict();
+
 export type SignupDTO = z.infer<typeof signupSchema>;
 export type LoginDTO = z.infer<typeof loginSchema>;
 export type ChangePasswordDTO = z.infer<typeof changePasswordSchema>;
@@ -60,3 +83,5 @@ export type ForgotPasswordDTO = z.infer<typeof forgotPasswordSchema>;
 export type RefreshDTO = z.infer<typeof refreshSchema>;
 export type ResetPasswordDTO = z.infer<typeof resetPasswordSchema>;
 export type ChangeEmailDTO = z.infer<typeof changeEmailSchema>;
+export type VerifyOtpDTO = z.infer<typeof verifyOtpSchema>;
+export type ResendOtpDTO = z.infer<typeof resendOtpSchema>;

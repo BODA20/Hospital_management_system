@@ -1,9 +1,10 @@
 // ─── Vitals ────────────────────────────────────────────────────────────────────
 export interface Vitals {
-  bp?: string;          // e.g. "120/80"
-  pulse?: number;       // beats per minute
-  temperature?: number; // Celsius
-  weight?: number;      // kg
+  bp?: string;                // e.g. "120/80"
+  pulse?: number;             // beats per minute
+  temperature?: number;       // Celsius
+  weight?: number;            // kg
+  respiratory_rate?: number;  // breaths per minute
 }
 
 // ─── Visit status type ─────────────────────────────────────────────────────────

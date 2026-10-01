@@ -3,7 +3,8 @@ import * as usersRepo from '../../src/modules/users/repositories/user.repo';
 jest.mock('../../src/modules/users/repositories/user.repo', () => ({
   findUserByEmail:          jest.fn(),
   findUserById:             jest.fn(),
-  findUserForAuth:          jest.fn(),
+  findUserByIdWithDepartment: jest.fn().mockImplementation((id: number) => (usersRepo as any).findUserById(id)),
+  findUserForAuth:          jest.fn().mockImplementation(async (id: number) => ({ id, role: 'admin', is_active: true })),
   findUserWithPasswordById: jest.fn(),
   createUser:               jest.fn(),
   updateUserById:           jest.fn(),
@@ -16,6 +17,7 @@ jest.mock('../../src/modules/users/repositories/user.repo', () => ({
   updateUserRole:           jest.fn(),
   adminUpdateUser:          jest.fn(),
   findAllUsers:             jest.fn(),
+  getAllUsersWithDepartments: jest.fn().mockImplementation(() => (usersRepo as any).findAllUsers()),
 }));
 
 export const mockedUsersRepo = usersRepo as jest.Mocked<typeof usersRepo>;

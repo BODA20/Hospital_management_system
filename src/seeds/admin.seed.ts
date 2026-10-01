@@ -15,13 +15,11 @@ export async function seed() {
 
   const hashed = await bcrypt.hash('Admin123!', 12);
 
-  await db('users').insert({
-    full_name: 'Boda Admin',
-    email: 'bodadmin@system.com',
-    password_hash: hashed,
-    role: UserRole.ADMIN,
-    is_active: true,
-  });
+  await db.raw(
+    `INSERT INTO users (full_name, email, password_hash, role, is_active, phone)
+     VALUES (?, ?, ?, ?, true, 'NOT_PROVIDED')`,
+    ['Boda Admin', 'bodadmin@system.com', hashed, UserRole.ADMIN]
+  );
 
   logger.info('Admin seeded ✅');
 }

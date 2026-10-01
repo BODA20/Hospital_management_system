@@ -21,6 +21,15 @@ export const createInitialInvoice = async (
   trx?: Knex.Transaction,
 ) => {
   const work = async (t: Knex.Transaction) => {
+    // ─── Idempotency Guard ──────────────────────────────────────────────────
+    // If an invoice already exists for this visit (e.g. created by a previous
+    // code path or a retry), return it without creating a duplicate.
+    // This prevents the 500 error when completeAppointment → completeVisit
+    // → createInitialInvoice is called after the invoice was already generated.
+    const existing = await t<Invoice>('invoices').where({ visit_id }).first();
+    if (existing) return existing;
+    // ───────────────────────────────────────────────────────────────────────
+
     const invoice_no = await generateInvoiceNo(t);
 
     const [invoice] = await t<Invoice>('invoices')
@@ -128,6 +137,59 @@ export const processPayment = async (
     })
     .returning('*');
 
+  if (updatedInvoice) {
+    let appointmentId = (updatedInvoice as any).appointment_id;
+    if (!appointmentId && updatedInvoice.visit_id) {
+      const visit = await db('visits').where({ id: updatedInvoice.visit_id }).first();
+      appointmentId = visit?.appointment_id;
+    }
+    if (!appointmentId) {
+      const pendingAppt = await db('appointments')
+        .where({ patient_id: updatedInvoice.patient_id })
+        .whereIn('status', ['pending', 'pending_payment'])
+        .orderBy('created_at', 'desc')
+        .first();
+      appointmentId = pendingAppt?.id;
+    }
+
+    if (appointmentId) {
+      await db('appointments')
+        .where({ id: appointmentId })
+        .update({ status: 'confirmed', updated_at: db.fn.now() });
+
+      setImmediate(async () => {
+        try {
+          const appt = await db('appointments as a')
+            .join('patients as p', 'a.patient_id', 'p.id')
+            .join('users as pu', 'p.user_id', 'pu.id')
+            .leftJoin('doctors as d', 'a.doctor_id', 'd.id')
+            .leftJoin('users as du', 'd.user_id', 'du.id')
+            .where('a.id', appointmentId)
+            .select('a.*', 'pu.email as patient_email', 'pu.full_name as patient_name', 'du.full_name as doctor_name')
+            .first();
+
+          if (appt?.patient_email) {
+            const { Email } = await import('../../../common/utils/email');
+            const mailer = new Email(
+              { email: appt.patient_email, name: appt.patient_name },
+              process.env.FRONTEND_URL || 'http://localhost:3000',
+            );
+            await mailer.sendBookingConfirmation({
+              doctorName: appt.doctor_name || 'Doctor',
+              department: null,
+              appointmentDate: appt.appointment_date ? String(appt.appointment_date).split('T')[0] : null,
+              timeSlot: appt.time_slot || null,
+              reason: appt.reason || null,
+              bookingSource: appt.booking_source,
+            });
+          }
+        } catch (e: any) {
+          console.error('[processPayment] Email error:', e.message);
+        }
+      });
+    }
+  }
+
   return updatedInvoice;
 };
 
@@ -153,4 +215,9 @@ export const getDailyRevenue = async () => {
     .first();
 
   return result?.revenue ?? 0;
+};
+
+export const getAllInvoices = async () => {
+  return await db<Invoice>('invoices')
+    .orderBy('created_at', 'desc');
 };

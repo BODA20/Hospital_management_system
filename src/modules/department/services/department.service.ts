@@ -1,5 +1,6 @@
 import * as deptRepo from '../repositories/department.repo';
 import { appError } from '../../../common/errors/AppError';
+import logger from '../../../common/utils/logger';
 
 const MAX_DEPARTMENTS = 5;
 
@@ -10,18 +11,24 @@ export const createDepartment = async (body: {
   description?: string;
   head_doctor_id?: number;
 }) => {
-  // Constraint: max 5 departments (cannot be expressed as a DB constraint)
-  const count = await deptRepo.countDepartments();
-  if (count >= MAX_DEPARTMENTS) {
-    throw new appError(
-      `Maximum number of departments (${MAX_DEPARTMENTS}) reached. Cannot create more departments.`,
-      400,
-    );
-  }
+  try {
+    // Constraint: max 5 departments (cannot be expressed as a DB constraint)
+    const count = await deptRepo.countDepartments();
+    if (count >= MAX_DEPARTMENTS) {
+      throw new appError(
+        `Maximum number of departments (${MAX_DEPARTMENTS}) reached. Cannot create more departments.`,
+        400,
+      );
+    }
 
-  // DB UNIQUE constraints on (name, code) will reject duplicates automatically.
-  // The errorHandler catches pg error 23505 and returns a clean 409 response.
-  return deptRepo.createDepartment(body);
+    // DB UNIQUE constraints on (name, code) will reject duplicates automatically.
+    // The errorHandler catches pg error 23505 and returns a clean 409 response.
+    return await deptRepo.createDepartment(body);
+  } catch (error: any) {
+    logger.error('CRASH IN CREATE DEPARTMENT:', { error: error instanceof Error ? error.message : error });
+    if (error instanceof appError) throw error;
+    throw new appError(error.message || 'Failed to create department', 500);
+  }
 };
 
 // ─── Get All Departments ───────────────────────────────────────────────────────

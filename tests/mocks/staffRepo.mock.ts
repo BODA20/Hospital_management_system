@@ -5,7 +5,9 @@ export const mockedStaffRequestRepo = {
   findAll: jest.fn(),
   updateStatus: jest.fn(),
   getPendingRequestByUserId: jest.fn(),
-  getAllPending: jest.fn()
+  getAllPending: jest.fn(),
+  createOperationalRequest: jest.fn(),
+  getOperationalRequestsByUserId: jest.fn(),
 };
 
 export const makeStaffRequest = (overrides: Partial<Record<string, any>> = {}) => ({

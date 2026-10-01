@@ -1,16 +1,16 @@
 import db from '../src/config/db';
-import { clearAllUserCache } from '../src/common/utils/userCache';
 
 jest.mock('../src/config/redis', () => {
   const mRedisClient = {
-    connect: jest.fn(),
+    connect: jest.fn().mockImplementation(async () => undefined),
     on: jest.fn(),
-    quit: jest.fn(),
-    set: jest.fn(),
-    get: jest.fn().mockResolvedValue(null),
-    del: jest.fn(),
-    exists: jest.fn().mockResolvedValue(0),
+    quit: jest.fn().mockImplementation(async () => undefined),
+    set: jest.fn().mockImplementation(async () => 'OK'),
+    get: jest.fn().mockImplementation(async () => null),
+    del: jest.fn().mockImplementation(async () => 1),
+    exists: jest.fn().mockImplementation(async () => 0),
     isOpen: true,
+    isReady: true,
   };
   return {
     __esModule: true,
@@ -28,7 +28,6 @@ beforeAll(async () => {
 afterEach(() => {
   jest.clearAllTimers();
   jest.clearAllMocks();
-  clearAllUserCache();
 });
 
 afterAll(async () => {

@@ -32,8 +32,29 @@ visitsRouter.post(
   visitController.createVisit,
 );
 
+// ─── Nurse: patient check-in (creates a visit in awaiting_vitals state) ──────
+visitsRouter.post(
+  '/check-in',
+  restrictTo('nurse', 'receptionist', 'admin'),
+  visitController.nurseCheckIn,
+);
+
+// ─── Get visit by appointment ID (for doctor consultation modal & reception print) ──
+visitsRouter.get(
+  '/by-appointment/:appointmentId',
+  restrictTo('admin', 'doctor', 'nurse', 'receptionist'),
+  visitController.getByAppointmentId,
+);
+
 // ─── Nurse: record vitals ──────────────────────────────────────────────────────
 visitsRouter.patch(
+  '/:id/vitals',
+  restrictTo('nurse'),
+  validate(recordVitalsSchema),
+  visitController.recordVitals,
+);
+
+visitsRouter.post(
   '/:id/vitals',
   restrictTo('nurse'),
   validate(recordVitalsSchema),
@@ -47,13 +68,26 @@ visitsRouter.get(
   visitController.getPatientHistory,
 );
 
-// ─── Admin: view all visits ────────────────────────────────────────────────────
-visitsRouter.get('/', restrictTo('admin', 'doctor'), visitController.getAllVisits);
+// ─── Patient: view own visit history ─────────────────────────────────────────
+visitsRouter.get(
+  '/my-records',
+  restrictTo('patient'),
+  visitController.getMyRecordsAsPatient,
+);
+
+// ─── Admin/Reception: view all visits ──────────────────────────────────────────
+visitsRouter.get('/', restrictTo('admin', 'doctor', 'nurse', 'receptionist'), visitController.getAllVisits);
 
 // ─── Single visit detail — shared ─────────────────────────────────────────────
-visitsRouter.get('/:id', restrictTo('admin', 'doctor'), visitController.getVisitById);
+visitsRouter.get('/:id', restrictTo('admin', 'doctor', 'nurse', 'receptionist'), visitController.getVisitById);
 
 // ─── Update visit (doctor who created it or admin) ────────────────────────────
+visitsRouter.patch(
+  '/:id/complete',
+  restrictTo('doctor', 'admin'),
+  visitController.completeVisit,
+);
+
 visitsRouter.patch(
   '/:id',
   restrictTo('doctor', 'admin'),

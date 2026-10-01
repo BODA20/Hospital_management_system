@@ -27,6 +27,15 @@ doctorsRouter.get(
   doctorsController.getMyAppointments,
 );
 
+doctorsRouter.post(
+  '/notes',
+  protect,
+  restrictTo('doctor'),
+  doctorsController.saveDoctorNotes,
+);
+
+doctorsRouter.get('/:doctorId/available-slots', doctorsController.getAvailableSlots);
+
 doctorsRouter.patch(
   '/:id',
   protect,

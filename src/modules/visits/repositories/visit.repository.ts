@@ -56,30 +56,57 @@ export const createVisit = async (data: CreateVisitInput) => {
   return visit;
 };
 
+import { resolveVitalsForRecord } from '../../appointments/repositories/appo.repo';
+
 // ─── Get Patient History ───────────────────────────────────────────────────────
 // All visits for a patient, joined with doctor name — ordered latest first.
 export const getPatientHistory = async (patientId: number) => {
-  return visitWithDetails()
+  const visits = await visitWithDetails()
     .where('v.patient_id', patientId)
     .orderBy('v.check_in_at', 'desc');
+
+  return Promise.all(
+    visits.map(async (v) => ({
+      ...v,
+      vitals: await resolveVitalsForRecord(v.patient_id, v.vitals),
+    }))
+  );
 };
 
 // ─── Get Visit Details (single) ────────────────────────────────────────────────
 // Full detail with patient + doctor joined.
 export const getVisitDetails = async (id: number) => {
-  return visitWithDetails().where('v.id', id).first();
+  const visit = await visitWithDetails().where('v.id', id).first();
+  if (!visit) return null;
+  return {
+    ...visit,
+    vitals: await resolveVitalsForRecord(visit.patient_id, visit.vitals),
+  };
 };
 
 // ─── Get All Visits ────────────────────────────────────────────────────────────
 export const getAllVisits = async () => {
-  return visitWithDetails().orderBy('v.check_in_at', 'desc');
+  const visits = await visitWithDetails().orderBy('v.check_in_at', 'desc');
+  return Promise.all(
+    visits.map(async (v) => ({
+      ...v,
+      vitals: await resolveVitalsForRecord(v.patient_id, v.vitals),
+    }))
+  );
 };
 
 // ─── Get Visits by Doctor ──────────────────────────────────────────────────────
 export const getVisitsByDoctor = async (doctorId: number) => {
-  return visitWithDetails()
+  const visits = await visitWithDetails()
     .where('v.doctor_id', doctorId)
     .orderBy('v.check_in_at', 'desc');
+
+  return Promise.all(
+    visits.map(async (v) => ({
+      ...v,
+      vitals: await resolveVitalsForRecord(v.patient_id, v.vitals),
+    }))
+  );
 };
 
 // ─── Update Visit ──────────────────────────────────────────────────────────────
@@ -112,18 +139,61 @@ export const findRawById = async (id: number) => {
 // Saves vitals, records the nurse who took them, and flips status to ready_for_doctor.
 export const recordVitals = async (
   id: number,
-  vitals: object,
+  vitals: any,
   nurseId: number,
 ) => {
+  const visit = await db('visits').where({ id }).first();
+  const vitalsObj = typeof vitals === 'string' ? JSON.parse(vitals) : vitals;
+
+  const formatted = {
+    blood_pressure: vitalsObj.blood_pressure || vitalsObj.bp || null,
+    bp: vitalsObj.bp || vitalsObj.blood_pressure || null,
+    heart_rate: vitalsObj.heart_rate != null ? Number(vitalsObj.heart_rate) : (vitalsObj.pulse != null ? Number(vitalsObj.pulse) : null),
+    pulse: vitalsObj.pulse != null ? Number(vitalsObj.pulse) : (vitalsObj.heart_rate != null ? Number(vitalsObj.heart_rate) : null),
+    temperature: vitalsObj.temperature != null ? Number(vitalsObj.temperature) : null,
+    weight: vitalsObj.weight != null ? Number(vitalsObj.weight) : null,
+    respiratory_rate: vitalsObj.respiratory_rate != null ? Number(vitalsObj.respiratory_rate) : null,
+    logged_at: new Date().toISOString(),
+    notes: vitalsObj.notes || null,
+  };
+
   const [updated] = await db('visits')
     .where({ id })
     .update({
-      vitals: JSON.stringify(vitals),
+      vitals: JSON.stringify(formatted),
       nurse_id: nurseId,
       status: 'ready_for_doctor',
       updated_at: db.fn.now(),
     })
     .returning('*');
+
+  if (visit && visit.patient_id) {
+    try {
+      let sys: number | null = null;
+      let dia: number | null = null;
+      if (formatted.blood_pressure && typeof formatted.blood_pressure === 'string' && formatted.blood_pressure.includes('/')) {
+        const parts = formatted.blood_pressure.split('/');
+        sys = Number(parts[0]) || null;
+        dia = Number(parts[1]) || null;
+      }
+      await db('patient_vitals').insert({
+        patient_id: visit.patient_id,
+        nurse_id: nurseId,
+        blood_pressure_sys: sys,
+        blood_pressure_dia: dia,
+        temperature: formatted.temperature,
+        heart_rate: formatted.heart_rate,
+        weight: formatted.weight,
+        respiratory_rate: formatted.respiratory_rate,
+        notes: formatted.notes,
+        created_at: db.fn.now(),
+        updated_at: db.fn.now(),
+      });
+    } catch (err) {
+      console.error('[recordVitals] Error inserting patient_vitals record:', err);
+    }
+  }
+
   return updated;
 };
 
@@ -131,8 +201,15 @@ export const recordVitals = async (
 // Doctor dashboard query: fetches visits waiting for a specific doctor, ordered
 // by check-in time (earliest first — longest waiting patients first).
 export const getPendingVisitsForDoctor = async (doctorId: number) => {
-  return visitWithDetails()
+  const visits = await visitWithDetails()
     .where('v.status', 'ready_for_doctor')
     .andWhere('v.doctor_id', doctorId)
     .orderBy('v.check_in_at', 'asc');
+
+  return Promise.all(
+    visits.map(async (v) => ({
+      ...v,
+      vitals: await resolveVitalsForRecord(v.patient_id, v.vitals),
+    }))
+  );
 };

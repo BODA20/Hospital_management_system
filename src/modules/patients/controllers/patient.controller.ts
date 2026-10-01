@@ -1,11 +1,22 @@
 import { Request, Response } from 'express';
 import * as patientService from '../services/patient.service';
 import { asyncHandler } from '../../../common/utils/asyncHandler';
+import { logAuditEvent } from '../../audit/services/audit.service';
 
 // ─── Create Patient (admin) ────────────────────────────────────────────────────
 export const createPatient = asyncHandler(
   async (req: Request, res: Response) => {
     const patient = await patientService.createPatient(req.body);
+
+    // Audit: admin manually created a patient record
+    const adminUser = req.user as any;
+    logAuditEvent(req, {
+      action_type: 'PATIENT_CREATED',
+      user_id:     adminUser?.id ?? null,
+      actor_name:  adminUser?.full_name ?? adminUser?.email ?? 'Admin',
+      description: `Admin created patient record (Patient ID: ${patient?.id ?? 'N/A'}, email: ${req.body.email ?? 'N/A'})`,
+    });
+
     res.status(201).json({ status: 'success', data: patient });
   },
 );
@@ -65,7 +76,18 @@ export const updatePatient = asyncHandler(
 // ─── Delete Patient (admin) ───────────────────────────────────────────────────
 export const deletePatient = asyncHandler(
   async (req: Request, res: Response) => {
-    const result = await patientService.deletePatient(Number(req.params.id));
+    const patientId = Number(req.params.id);
+    const result = await patientService.deletePatient(patientId);
+
+    // Audit: admin deleted a patient record
+    const adminUser = req.user as any;
+    logAuditEvent(req, {
+      action_type: 'PATIENT_DELETED',
+      user_id:     adminUser?.id ?? null,
+      actor_name:  adminUser?.full_name ?? adminUser?.email ?? 'Admin',
+      description: `Admin deleted patient record ID: ${patientId}`,
+    });
+
     res.json({ status: 'success', data: result });
   },
 );
@@ -87,3 +109,11 @@ export const getMyAppointments = asyncHandler(
     res.json({ status: 'success', data: result });
   },
 );
+
+export const getMyMedicalRecords = asyncHandler(
+  async (req: Request, res: Response) => {
+    const result = await patientService.getMyMedicalRecords(req.user.id);
+    res.json({ status: 'success', results: result.length, data: result });
+  },
+);
+

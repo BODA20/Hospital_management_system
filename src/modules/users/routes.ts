@@ -16,20 +16,31 @@ router.use(protect);
 
 router.get('/', restrictTo('admin'), usersController.getUsers);
 
-router.get(
-  '/:id',
-  restrictTo('admin'),
-  validate(userIdParamSchema, 'params'),
-  usersController.getUser,
-);
+router.get('/me', usersController.getMe);
+
 router.patch(
   '/me',
   validate(updateProfileSchema),
   usersController.updateProfile,
 );
 
+router.get(
+  '/:id',
+  restrictTo('admin'),
+  validate(userIdParamSchema, 'params'),
+  usersController.getUser,
+);
+
 router.patch(
   '/:id',
+  restrictTo('admin'),
+  validate(userIdParamSchema, 'params'),
+  validate(adminUpdateUserSchema),
+  usersController.adminUpdateUser,
+);
+
+router.patch(
+  '/:id/role',
   restrictTo('admin'),
   validate(userIdParamSchema, 'params'),
   validate(adminUpdateUserSchema),

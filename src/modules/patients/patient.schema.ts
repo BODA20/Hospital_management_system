@@ -84,10 +84,17 @@ export const updatePatientSchema = z
 export type UpdatePatientDTO = z.infer<typeof updatePatientSchema>;
 
 // ─── Pagination Query Params ───────────────────────────────────────────────────
-export const patientQuerySchema = z.object({
-  page: z.coerce.number().int().positive().optional().default(1),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  search: z.string().trim().optional(),
-});
+export const patientQuerySchema = z
+  .object({
+    page: z.coerce.number().int().positive().optional().default(1),
+    limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+    search: z.string().trim().optional().nullable(),
+    query: z.string().trim().optional().nullable(),
+    date: z.string().optional().nullable(),
+    doctorId: z.any().optional().nullable(),
+    doctor_id: z.any().optional().nullable(),
+    status: z.string().optional().nullable(),
+  })
+  .passthrough();
 
 export type PatientQueryDTO = z.infer<typeof patientQuerySchema>;

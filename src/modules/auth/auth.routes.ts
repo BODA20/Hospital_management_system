@@ -9,6 +9,8 @@ import {
   changeEmailSchema,
   changePasswordSchema,
   refreshSchema,
+  verifyOtpSchema,
+  resendOtpSchema,
 } from './auth.validation';
 import * as authController from './controllers/auth.controller';
 import { protect } from '../../common/middleware/auth';
@@ -28,6 +30,8 @@ const authLimiter = rateLimit({
 });
 
 router.post('/signup', authLimiter, validate(signupSchema), authController.signup);
+router.post('/verify-otp', authLimiter, validate(verifyOtpSchema), authController.verifyOTP);
+router.post('/resend-otp', authLimiter, validate(resendOtpSchema), authController.resendOTP);
 router.post('/login', authLimiter, validate(loginSchema), authController.login);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
 router.post('/refresh', validate(refreshSchema), authController.refresh);
@@ -48,7 +52,7 @@ router.patch(
   authController.requestChangeEmail,
 );
 
-router.post('/logout', authController.logout);
+router.post('/logout', protect, authController.logout);
 
 router.patch(
   '/change-password',

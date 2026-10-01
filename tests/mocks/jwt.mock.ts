@@ -7,6 +7,14 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(),
 }));
 
+// ─── 4. Mock: Redis Cache Service ──────────────────────────────────────────────
+jest.mock('../../src/common/services/redisCache.service', () => ({
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+  exists: jest.fn().mockResolvedValue(false),
+}));
+
 // ─── 5. Mock: Session + Refresh-Token Repos ───────────────────────────────────
 jest.mock('../../src/modules/auth/services/session.service', () => ({
   createSession:         jest.fn(),
@@ -46,6 +54,8 @@ export const loginAs = (user: ReturnType<typeof makeUser>) => {
     exp:  Math.floor(Date.now() / 1000) + 3600,
   });
   mockedUsersRepo.findUserById.mockResolvedValue(user as any);
-  mockedUsersRepo.findUserForAuth.mockResolvedValue({ id: user.id, role: user.role, is_active: user.is_active, password_change_at: user.password_change_at } as any);
+  mockedUsersRepo.findUserForAuth.mockImplementation(async () => {
+    return { id: user.id, role: user.role, is_active: user.is_active, password_change_at: user.password_change_at } as any;
+  });
 };
 

@@ -26,10 +26,16 @@ patientsRouter.get(
   patientController.getMyAppointments,
 );
 
-// ─── Admin / Doctor routes ─────────────────────────────────────────────────────
+patientsRouter.get(
+  '/me/medical-records',
+  restrictTo('patient'),
+  patientController.getMyMedicalRecords,
+);
+
+// ─── Admin / Doctor / Receptionist routes ───────────────────────────────────────
 patientsRouter.get(
   '/',
-  restrictTo('admin', 'doctor'),
+  restrictTo('admin', 'doctor', 'receptionist'),
   validate(patientQuerySchema, 'query'),
   patientController.getAllPatients,
 );
@@ -56,7 +62,7 @@ patientsRouter.get(
 
 patientsRouter.patch(
   '/:id',
-  restrictTo('admin'),
+  restrictTo('admin', 'patient'),
   validate(updatePatientSchema),
   patientController.updatePatient,
 );

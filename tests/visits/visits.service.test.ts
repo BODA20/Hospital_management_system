@@ -78,11 +78,11 @@ describe('SERVICE: visitsService (Business Logic Layer)', () => {
     });
 
     describe('✅ Success — valid payload', () => {
-      it('should create a visit and auto-complete the appointment', async () => {
+      it('should create a visit and set appointment status to in_progress', async () => {
         const result = await visitsService.createVisit(CREATE_VISIT_INPUT);
         expect(result).toEqual(MOCK_VISIT_DETAIL);
         expect(mockedVisitsRepo.createVisit).toHaveBeenCalledWith(CREATE_VISIT_INPUT);
-        expect(mockedAppoRepo.updateStatus).toHaveBeenCalledWith(1, 'completed');
+        expect(mockedAppoRepo.updateStatus).toHaveBeenCalledWith(1, 'in_progress');
       });
     });
 

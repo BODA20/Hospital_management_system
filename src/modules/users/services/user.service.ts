@@ -12,12 +12,12 @@ import * as cache from '../../../common/services/redisCache.service';
 import { buildAuthUserKey } from '../../../common/middleware/auth';
 
 export const getAllUsers = async () => {
-  const users = await userRepo.findAllUsers();
+  const users = await userRepo.getAllUsersWithDepartments();
   return users.map(stripSensitive);
 };
 
 export const getUserById = async (id: number) => {
-  const user = await userRepo.findUserById(id);
+  const user = await userRepo.findUserByIdWithDepartment(id);
 
   if (!user) {
     throw new appError('User not found', 404);
@@ -31,12 +31,30 @@ export const updateProfile = async (
   data: {
     full_name?: string;
     phone?: string;
+    phone_number?: string;
+    license_number?: string | null;
   },
 ) => {
-  const user = await userRepo.updateUserById(userId, data);
+  const phoneVal = data.phone || data.phone_number;
+  const { license_number, phone_number, ...userData } = data;
+  if (phoneVal) userData.phone = phoneVal;
+  const user = await userRepo.updateUserById(userId, userData);
+
+  if (license_number !== undefined) {
+    if (user.role === 'doctor') {
+      await db('doctors').where({ user_id: userId }).update({ license_number, updated_at: db.fn.now() });
+    } else if (user.role === 'nurse') {
+      await db('nurses').where({ user_id: userId }).update({ license_number, updated_at: db.fn.now() });
+    }
+  }
+
+  if (phoneVal && user.role === 'patient') {
+    await db('patients').where({ user_id: userId }).update({ phone: phoneVal, updated_at: db.fn.now() });
+  }
+
   // Invalidate cache on profile update as well just in case (e.g. name change in logs/audit)
   await cache.del(buildAuthUserKey(userId));
-  return stripSensitive(user);
+  return getUserById(userId);
 };
 
 export const deactivateUser = async (id: number) => {
@@ -54,7 +72,7 @@ export const deactivateUser = async (id: number) => {
 
 export const adminUpdateUser = async (
   id: number,
-  data: { full_name?: string; role?: string; is_active?: boolean; specialization?: string },
+  data: { full_name?: string; role?: string; is_active?: boolean; specialization?: string; license_number?: string | null; phone?: string | null; assigned_shift?: 'Morning' | 'Night' },
 ) => {
   const existing = await userRepo.findUserById(id);
 
@@ -62,34 +80,46 @@ export const adminUpdateUser = async (
     throw new appError('User not found', 404);
   }
 
+  const { license_number, specialization, ...userUpdateData } = data;
+
   let result;
   if (data.role === 'doctor' && existing.role !== 'doctor') {
     try {
       result = await db.transaction(async (trx) => {
-        const user = await userRepo.adminUpdateUser(id, data, trx);
+        const user = await userRepo.adminUpdateUser(id, userUpdateData, trx);
 
         const existingDoc = await doctorRepo.findByUserId(id, trx);
         if (!existingDoc) {
           await doctorRepo.createDoctor({
             user_id: id,
-            specialization: data.specialization || 'General',
+            specialization: specialization || 'General',
             years_of_experience: 0,
             bio: '',
             consultation_fee: 0,
+            department_id: null as any,
           }, trx);
         }
 
-        return stripSensitive(user);
+        return user;
       });
     } catch (error: any) {
       throw new appError(error.message || 'Failed to provision doctor profile', 500);
     }
   } else {
-    result = await userRepo.adminUpdateUser(id, data);
+    result = await userRepo.adminUpdateUser(id, userUpdateData);
+  }
+
+  if (license_number !== undefined) {
+    const targetRole = data.role || existing.role;
+    if (targetRole === 'doctor') {
+      await db('doctors').where({ user_id: id }).update({ license_number, updated_at: db.fn.now() });
+    } else if (targetRole === 'nurse') {
+      await db('nurses').where({ user_id: id }).update({ license_number, updated_at: db.fn.now() });
+    }
   }
 
   // Invalidate cache if role or active status changed
   await cache.del(buildAuthUserKey(id));
-  return stripSensitive(result);
+  return getUserById(id);
 };
 

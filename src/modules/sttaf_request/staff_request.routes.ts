@@ -1,7 +1,7 @@
 import express from 'express';
 import * as staffController from './controllers/staff_request.controller';
 import { protect, restrictTo } from '../../common/middleware/auth';
-import { validate } from '../../common/middleware/validate'; // تأكد من المسار
+import { validate } from '../../common/middleware/validate';
 import {
   createStaffRequestBodySchema,
   approveRejectParamsSchema,
@@ -13,6 +13,26 @@ export const staffRequestRouter = express.Router({ mergeParams: true });
 
 staffRequestRouter.use(protect);
 
+// ── Staff Operational Requests (For logged-in staff/admin) ──
+staffRequestRouter.post(
+  '/',
+  restrictTo('doctor', 'nurse', 'admin', 'receptionist'),
+  staffController.createOperationalRequest
+);
+
+staffRequestRouter.post(
+  '/create',
+  restrictTo('doctor', 'nurse', 'admin', 'receptionist'),
+  staffController.createOperationalRequest
+);
+
+staffRequestRouter.get(
+  '/',
+  restrictTo('admin', 'doctor', 'nurse'),
+  staffController.getStaffRequests
+);
+
+// ── Original Signup/Role requests ──
 staffRequestRouter.post(
   '/:id',
   validate(staffIdParamSchema, 'params'),
@@ -20,9 +40,9 @@ staffRequestRouter.post(
   staffController.createRequest,
 );
 
+// Below routes are restricted to admin only (excluding GET / since we moved it above)
 staffRequestRouter.use(restrictTo('admin'));
 
-staffRequestRouter.get('/', staffController.getStaffRequests);
 
 staffRequestRouter.patch(
   '/:id/approve',

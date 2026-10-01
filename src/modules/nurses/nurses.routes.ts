@@ -27,5 +27,8 @@ nursesRouter.delete('/:id', restrictTo('admin'), nurseController.deleteNurse);
 
 
 // ─── Shared authenticated routes ───────────────────────────────────────────────
+nursesRouter.get('/vitals-queue', nurseController.getVitalsQueue);
+nursesRouter.get('/me/beds', nurseController.getMyBeds);
+nursesRouter.get('/me/tasks', nurseController.getMyTasks);
 nursesRouter.get('/', nurseController.getAllNurses);
 nursesRouter.get('/:id', nurseController.getNurseById);

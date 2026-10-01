@@ -1,25 +1,33 @@
 import express from 'express';
-import * as controller from '../appointments/controllers/appo.controller';
+import * as controller from './controllers/appo.controller';
 import { protect, restrictTo } from '../../common/middleware/auth';
 import { validate } from '../../common/middleware/validate';
 import {
   createAppointmentSchema,
   updateStatusSchema,
-} from '../appointments/appo.schema';
+  rescheduleAppointmentSchema,
+} from './appo.schema';
 
 export const appointmentsRouter = express.Router();
 
-// All appointment routes require authentication
+// ─── Public Unprotected Email Action Routes ─────────────────────────────────
+appointmentsRouter.post('/public-action', controller.publicAppointmentAction);
+appointmentsRouter.post('/confirm', controller.confirmByToken);
+appointmentsRouter.post('/cancel', controller.cancelByToken);
+
+
+// All subsequent appointment routes require authentication
 appointmentsRouter.use(protect);
 
-// ─── Patient Routes ────────────────────────────────────────────────────────────
+// ─── Patient & Staff Booking Route ──────────────────────────────────────────────
 appointmentsRouter.post(
   '/',
-  restrictTo('patient'),
+  restrictTo('patient', 'admin', 'doctor'),
   validate(createAppointmentSchema),
   controller.createAppointment,
 );
 
+// ─── Patient Routes ────────────────────────────────────────────────────────────
 appointmentsRouter.get(
   '/me',
   restrictTo('patient'),
@@ -27,25 +35,49 @@ appointmentsRouter.get(
 );
 
 // ─── Doctor Routes ─────────────────────────────────────────────────────────────
-
-// GET /doctor/schedule/today — daily schedule with patient list & counts
 appointmentsRouter.get(
   '/doctor/schedule/today',
   restrictTo('doctor'),
   controller.getDailySchedule,
 );
 
-// GET /doctor — all doctor appointments
 appointmentsRouter.get(
   '/doctor',
   restrictTo('doctor'),
   controller.getDoctorAppointments,
 );
 
-// PATCH /:id/status — update appointment status (doctor only)
+// ─── Admin Master Routes ───────────────────────────────────────────────────────
+appointmentsRouter.get(
+  '/',
+  restrictTo('admin', 'nurse'),
+  controller.getAllAppointments,
+);
+
+// ─── REQ 3: Interactive Attendance Confirmation (email action buttons) ─────────
+// These are hit when patient clicks email CTA buttons – no auth required (token in URL is the ID)
+appointmentsRouter.get('/:id/confirm-attendance', controller.confirmAttendance);
+appointmentsRouter.get('/:id/cancel-by-patient',  controller.cancelByPatient);
+appointmentsRouter.post('/:id/confirm-attendance', controller.confirmAttendance);
+appointmentsRouter.post('/:id/cancel-by-patient',  controller.cancelByPatient);
+
+// ─── Shared Update & Reschedule Routes ─────────────────────────────────────────
+appointmentsRouter.patch(
+  '/:id/complete',
+  restrictTo('patient', 'doctor', 'admin', 'nurse'),
+  controller.completeAppointment,
+);
+
 appointmentsRouter.patch(
   '/:id/status',
-  restrictTo('doctor'),
+  restrictTo('patient', 'doctor', 'admin', 'nurse'),
   validate(updateStatusSchema),
   controller.updateStatus,
+);
+
+appointmentsRouter.patch(
+  '/:id/reschedule',
+  restrictTo('admin', 'doctor'),
+  validate(rescheduleAppointmentSchema),
+  controller.rescheduleAppointment,
 );

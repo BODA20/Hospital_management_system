@@ -1,8 +1,10 @@
+// AGENT_TEST
 import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import * as billingService from './services/billing.service';
 import { stripeService } from './services/stripe.service';
 import { addInvoiceItemSchema, payInvoiceSchema } from './billing.schema';
+import { logAuditEvent } from '../audit/services/audit.service';
 
 export const processPayment = async (
   req: Request,
@@ -10,13 +12,23 @@ export const processPayment = async (
   next: NextFunction,
 ) => {
   try {
-    const id = parseInt(req.params.id as string, 10);
+    const rawId = req.params.id || req.body.invoice_id || req.body.id || req.body.appointment_id;
+    const id = parseInt(rawId as string, 10);
     if (isNaN(id)) {
-      return res.status(400).json({ status: 'error', message: 'Invalid ID' });
+      return res.status(400).json({ status: 'error', message: 'Invalid invoice ID' });
     }
 
     const body = payInvoiceSchema.parse(req.body);
     const invoice = await billingService.processPayment(id, body.payment_method);
+
+    // Audit: a payment was processed against an invoice
+    const actor = (req as any).user;
+    logAuditEvent(req, {
+      action_type: 'PAYMENT_PROCESSED',
+      user_id:     actor?.id ?? null,
+      actor_name:  actor?.full_name ?? actor?.email ?? 'System',
+      description: `Payment processed for Invoice ID: ${id} via method: ${body.payment_method} (amount: ${invoice?.final_amount ?? 'N/A'})`,
+    });
 
     res.json({
       status: 'success',
@@ -57,6 +69,38 @@ export const addInvoiceItem = async (
     next(err);
   }
 };
+
+export const getMyInvoices = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const role = (req as any).user.role;
+
+    // Staff roles (receptionist/admin) see ALL invoices across all patients
+    if (role === 'receptionist' || role === 'admin') {
+      const { getAllInvoices } = await import('./repositories/billing.repo');
+      const invoices = await getAllInvoices();
+      return res.json({ status: 'success', data: invoices });
+    }
+
+    // Patients see only their own invoices
+    const { findByUserId } = await import('../patients/repositories/patient.repository');
+    const patient = await findByUserId((req as any).user.id);
+    if (!patient) {
+      return res.json({ status: 'success', data: [] });
+    }
+    const invoices = await billingService.getPatientInvoices(patient.id, (req as any).user.id, role);
+    res.json({
+      status: 'success',
+      data: invoices,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 export const getPatientInvoices = async (
   req: Request,
@@ -122,17 +166,18 @@ export const createCheckoutSession = async (
   next: NextFunction,
 ) => {
   try {
-    const id = parseInt(req.params.id as string, 10);
+    const rawId = req.params.id || req.body.invoice_id || req.body.id || req.body.appointment_id;
+    const id = parseInt(rawId as string, 10);
     if (isNaN(id)) {
-      return res.status(400).json({ status: 'error', message: 'Invalid ID' });
+      return res.status(400).json({ status: 'error', message: 'Invalid invoice ID' });
     }
 
-    const invoice = await billingService.getInvoiceDetails(id, (req as any).user.id, (req as any).user.role);
-    
-    if (invoice.status !== 'pending') {
-      return res.status(422).json({ 
-        status: 'error', 
-        message: `Invoice cannot be paid online because status is '${invoice.status}'` 
+    const invoice = await billingService.getOrCreateInvoiceForCheckout(id, (req as any).user.id, (req as any).user.role);
+
+    if (['paid', 'cancelled'].includes(invoice.status)) {
+      return res.status(422).json({
+        status: 'error',
+        message: `Invoice cannot be paid online because status is '${invoice.status}'`
       });
     }
 
@@ -140,12 +185,13 @@ export const createCheckoutSession = async (
 
     res.json({
       status: 'success',
-      data: { url: session.url },
+      data: { url: session.url, checkout_url: session.url },
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 export const paymentSuccess = (req: Request, res: Response) => {
   res.send(`

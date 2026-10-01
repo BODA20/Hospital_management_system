@@ -21,9 +21,7 @@ const withDepartment = (trx?: Knex.Transaction) => {
     .leftJoin('departments as dept', 'd.department_id', 'dept.id')
     .select(
       'd.*',
-      'dept.name as department_name',
-      'dept.code as department_code',
-      'dept.description as department_description',
+      'dept.name_en as department_name',
     );
 };
 
@@ -82,4 +80,35 @@ export const getAllDoctors = async (filters: { specialization?: string; name?: s
 
   return query.orderBy('d.id', 'asc');
 };
+
+export const getBookedSlotsForDoctor = async (doctorId: number, dateStr: string): Promise<string[]> => {
+  // Exclude cancelled AND no_show to stay consistent with checkAvailability.
+  // Use both appointment_date and a UTC-safe DATE(starts_at) fallback so that
+  // cross-channel bookings (online patient vs walk-in) are never missed.
+  const appointments = await db('appointments')
+    .where('doctor_id', doctorId)
+    .whereNotIn('status', ['cancelled', 'no_show'])
+    .andWhere(function () {
+      this.where('appointment_date', dateStr)
+        .orWhereRaw("DATE(starts_at AT TIME ZONE 'UTC') = ?", [dateStr]);
+    })
+    .select('time_slot', 'starts_at');
+
+  const booked: string[] = [];
+  for (const appt of appointments) {
+    if (appt.time_slot) {
+      // Always take only the start part (handles "09:30" and "09:30 - 10:00")
+      const startTime = appt.time_slot.split('-')[0].trim().slice(0, 5);
+      booked.push(startTime);
+    } else if (appt.starts_at) {
+      // Use UTC to avoid local-timezone shifts on the Node.js server
+      const d = new Date(appt.starts_at);
+      const h = String(d.getUTCHours()).padStart(2, '0');
+      const m = String(d.getUTCMinutes()).padStart(2, '0');
+      booked.push(`${h}:${m}`);
+    }
+  }
+  return booked;
+};
+
 

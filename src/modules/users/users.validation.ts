@@ -27,8 +27,33 @@ export const createUserSchema = z
 export const updateProfileSchema = z
   .object({
     full_name: z.string().trim().min(2).max(100).optional(),
+    phone: z
+      .string()
+      .trim()
+      .min(7, 'Phone number is required and must be at least 7 digits')
+      .max(20, 'Phone must be at most 20 characters')
+      .regex(
+        /^\+?[0-9][\s\-\(\)0-9]{6,19}$/,
+        'Phone must be a valid number (e.g. +1 555 000 0000)',
+      )
+      .optional()
+      .nullable(),
+    phone_number: z
+      .string()
+      .trim()
+      .min(7)
+      .max(20)
+      .optional()
+      .nullable(),
+    license_number: z.string().trim().max(100).optional().nullable(),
   })
   .strict()
+  .transform((data) => {
+    if (!data.phone && data.phone_number) {
+      data.phone = data.phone_number;
+    }
+    return data;
+  })
   .refine((obj) => Object.keys(obj).length > 0, {
     message: 'At least one field must be provided',
     path: ['_'],
@@ -42,6 +67,9 @@ export const adminUpdateUserSchema = z
     is_active: z.boolean().optional(),
     role: z.enum(roles).optional(),
     specialization: z.string().trim().min(2).max(100).optional(),
+    license_number: z.string().trim().max(100).optional().nullable(),
+    phone: z.string().trim().optional().nullable(),
+    assigned_shift: z.enum(['Morning', 'Night']).optional(),
   })
   .strict()
   .refine((obj) => Object.keys(obj).length > 0, {

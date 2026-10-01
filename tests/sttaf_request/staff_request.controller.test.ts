@@ -2,14 +2,24 @@ import request from 'supertest';
 import { app } from '../../app';
 
 jest.mock('jsonwebtoken', () => ({ sign: jest.fn().mockReturnValue('mock_access_token'), verify: jest.fn() }));
-jest.mock('../../src/config/db', () => ({
-  __esModule: true,
-  default: {
-    transaction: jest.fn().mockImplementation(async (cb: Function) => cb({})),
-    fn: { now: jest.fn().mockReturnValue(new Date()) },
-    raw: jest.fn().mockResolvedValue([]),
-  },
-}));
+jest.mock('../../src/config/db', () => {
+  const mockKnex = () => {
+    const builder = {
+      where: jest.fn().mockReturnThis(),
+      update: jest.fn().mockResolvedValue([]),
+      first: jest.fn().mockResolvedValue({ role: 'nurse' }),
+    };
+    return builder;
+  };
+  const dbMock: any = jest.fn().mockImplementation(mockKnex);
+  dbMock.transaction = jest.fn().mockImplementation(async (cb: Function) => cb(dbMock));
+  dbMock.fn = { now: jest.fn().mockReturnValue(new Date()) };
+  dbMock.raw = jest.fn().mockResolvedValue([]);
+  return {
+    __esModule: true,
+    default: dbMock,
+  };
+});
 
 jest.mock('../../src/modules/users/repositories/user.repo', () => require('../mocks/usersRepo.mock').mockedUsersRepo);
 jest.mock('../../src/modules/sttaf_request/repositories/staff_request.repo', () => require('../mocks/staffRepo.mock').mockedStaffRequestRepo);
@@ -65,6 +75,24 @@ describe('STAFF REQUESTS API CONTROLLER', () => {
         const res = await request(app).patch(`/api/v1/staff-requests/${NEW_REQ.id}/approve`).set(auth());
         expect(res.status).toBe(200);
       });
+
+      it('admin approves Leave Request and sets user is_on_leave', async () => {
+        loginAs(ADMIN);
+        const leaveReq = makeStaffRequest({ id: 101, request_type: 'Leave Request', description: 'Vacation' });
+        mStaff.findById.mockResolvedValue(leaveReq as any);
+        mStaff.updateStatus.mockResolvedValue({...leaveReq, status:'approved'} as any);
+        const res = await request(app).patch(`/api/v1/staff-requests/${leaveReq.id}/approve`).set(auth());
+        expect(res.status).toBe(200);
+      });
+
+      it('admin approves Shift Change and updates assigned_shift', async () => {
+        loginAs(ADMIN);
+        const shiftReq = makeStaffRequest({ id: 102, request_type: 'Shift Change', description: 'Change to night shift please' });
+        mStaff.findById.mockResolvedValue(shiftReq as any);
+        mStaff.updateStatus.mockResolvedValue({...shiftReq, status:'approved'} as any);
+        const res = await request(app).patch(`/api/v1/staff-requests/${shiftReq.id}/approve`).set(auth());
+        expect(res.status).toBe(200);
+      });
     });
 
     describe('❌ RBAC', () => {
@@ -85,6 +113,35 @@ describe('STAFF REQUESTS API CONTROLLER', () => {
     it('patient -> 403', async () => {
       loginAs(PATIENT);
       expect((await request(app).get('/api/v1/staff-requests').set(auth())).status).toBe(403);
+    });
+    it('doctor/nurse gets their own operational requests', async () => {
+      const doctorUser = mkUser({id:15,role:'doctor'});
+      loginAs(doctorUser);
+      mStaff.getOperationalRequestsByUserId.mockResolvedValue([{ id: 1, request_type: 'Leave Request', description: 'Testing' }] as any);
+      const res = await request(app).get('/api/v1/staff-requests').set(auth());
+      expect(res.status).toBe(200);
+      expect(res.body.data).toBeDefined();
+    });
+  });
+
+  describe('POST /api/v1/staff-requests (Operational)', () => {
+    it('doctor creates operational request', async () => {
+      const doctorUser = mkUser({id:15,role:'doctor'});
+      loginAs(doctorUser);
+      mStaff.createOperationalRequest.mockResolvedValue({ id: 1, request_type: 'Leave Request', description: 'Need leave for 3 days' } as any);
+      const res = await request(app)
+        .post('/api/v1/staff-requests')
+        .set(auth())
+        .send({ request_type: 'Leave Request', description: 'Need leave for 3 days' });
+      expect(res.status).toBe(201);
+    });
+    it('patient -> 403', async () => {
+      loginAs(PATIENT);
+      const res = await request(app)
+        .post('/api/v1/staff-requests')
+        .set(auth())
+        .send({ request_type: 'Leave Request', description: 'Need leave for 3 days' });
+      expect(res.status).toBe(403);
     });
   });
 });

@@ -54,9 +54,12 @@ export const createVisit = async (body: CreateVisitInput) => {
   // 4. Create the visit — remaining FK errors bubble to the global error handler
   const visit = await visitRepo.createVisit(body);
 
-  // 5. If appointment_id provided, auto-complete the appointment
+  // 5. If appointment_id provided, transition to 'in_progress' (NOT 'completed').
+  //    The appointment must remain active in the doctor's queue until the doctor
+  //    explicitly completes the consultation. The old behaviour of auto-completing
+  //    here was the root cause of the premature "Completed" status bug.
   if (appointment_id) {
-    await appoRepo.updateStatus(appointment_id, 'completed');
+    await appoRepo.updateStatus(appointment_id, 'in_progress');
   }
 
   // Return enriched visit details
@@ -219,6 +222,14 @@ export const recordVitals = async (
   // 4. Save vitals and transition status → ready_for_doctor
   await visitRepo.recordVitals(visitId, vitalsData, nurse.id);
 
+  // 5. Stamp the linked appointment's queue_status so the queue board
+  //    reflects that vitals are done without changing the main status.
+  if (visit.appointment_id) {
+    await db('appointments')
+      .where({ id: visit.appointment_id })
+      .update({ queue_status: 'vitals_completed', updated_at: db.fn.now() });
+  }
+
   // Return enriched visit detail
   return visitRepo.getVisitDetails(visitId);
 };
@@ -243,4 +254,41 @@ export const getPendingVisits = async (doctorUserId: number) => {
     total: visitsWithSummary.length,
     visits: visitsWithSummary,
   };
+};
+
+// ─── Complete Visit Service Action ──────────────────────────────────────────────
+export const completeVisit = async (visitId: number, user?: any) => {
+  const visit = await visitRepo.findRawById(visitId);
+  if (!visit) {
+    throw new appError(`Visit with ID ${visitId} not found`, 404);
+  }
+
+  return await db.transaction(async (trx) => {
+    const checkOutAt = new Date().toISOString();
+
+    // Update visit status to completed
+    await visitRepo.updateVisit(
+      visitId,
+      { status: 'completed', check_out_at: checkOutAt },
+      trx,
+    );
+
+    // Update associated appointment status if present
+    if (visit.appointment_id) {
+      await appoRepo.updateStatus(visit.appointment_id, 'completed', user);
+    }
+
+    // Auto-generate initial invoice if missing
+    const doctor = await doctorRepo.findById(visit.doctor_id, trx);
+    const consultation_fee = doctor ? Number(doctor.consultation_fee) || 0 : 0;
+
+    await billingService.createInitialInvoice(
+      visitId,
+      visit.patient_id,
+      consultation_fee,
+      trx,
+    );
+
+    return visitRepo.getVisitDetails(visitId);
+  });
 };

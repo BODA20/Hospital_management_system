@@ -9,14 +9,16 @@ import type {
 
 // ─── Shared enriched select ────────────────────────────────────────────────────
 // Always JOINs users table so every query returns the full patient profile.
+// Filters u.role = 'patient' to exclude promoted staff members.
 const patientWithUser = () =>
   db('patients as p')
     .join('users as u', 'p.user_id', 'u.id')
+    .where('u.role', 'patient')
     .select(
       'p.id',
       'p.user_id',
       'p.date_of_birth',
-      'p.phone',
+      db.raw('COALESCE(p.phone, u.phone) as phone'),
       'p.gender',
       'p.blood_group',
       'p.emergency_contact',
@@ -26,6 +28,7 @@ const patientWithUser = () =>
       'u.full_name',
       'u.email',
       'u.is_active',
+      'u.role',
     );
 
 // ─── Create Patient ────────────────────────────────────────────────────────────
@@ -45,7 +48,7 @@ export const createPatient = async (data: CreatePatientInput) => {
       date_of_birth: data.date_of_birth,
       phone: data.phone,
       gender: data.gender,
-      blood_group: data.blood_group ?? null,
+      blood_group: data.blood_group,
       emergency_contact: data.emergency_contact,
     })
     .returning('*');
@@ -55,8 +58,11 @@ export const createPatient = async (data: CreatePatientInput) => {
 
 // ─── Create Base Patient ───────────────────────────────────────────────────────
 export const createBasePatient = async (userId: number, trx?: Knex.Transaction) => {
+  const knex = trx ?? db;
+  const user = await knex('users').where({ id: userId }).select('phone').first();
+  const phone = user?.phone && user.phone !== 'NOT_PROVIDED' ? user.phone : null;
   const query = trx ? trx('patients') : db('patients');
-  const [patient] = await query.insert({ user_id: userId }).returning('*');
+  const [patient] = await query.insert({ user_id: userId, phone }).returning('*');
   return patient;
 };
 
@@ -89,6 +95,7 @@ export const findAll = async ({
   // Total count (same filters, no pagination)
   const totalQuery = db('patients as p')
     .join('users as u', 'p.user_id', 'u.id')
+    .where('u.role', 'patient')
     .count('p.id as count');
 
   if (search) {
@@ -119,8 +126,8 @@ export const findByUserId = async (userId: number) => {
 };
 
 // ─── Find by email (uniqueness check) ─────────────────────────────────────────
-export const findByEmail = async (email: string) => {
-  return db('users').whereILike('email', email).first();
+export const findByEmail = async (email: string): Promise<any> => {
+  return (db('users') as any).whereILike('email', email).first();
 };
 
 // ─── Find by phone (uniqueness check) ─────────────────────────────────────────
@@ -160,7 +167,35 @@ export const getPatientAppointments = async (patientId: number) => {
       'a.notes',
       'a.doctor_id',
       'du.full_name as doctor_name',
-      'dept.name as department_name',
-      'dept.code as department_code',
+      'dept.name_en as department_name'
     );
 };
+
+export const getPatientMedicalRecords = async (userId: number) => {
+  const patient = await findByUserId(userId);
+  if (!patient) return [];
+
+  const visits = await db('visits as v')
+    .leftJoin('doctors as d', 'v.doctor_id', 'd.id')
+    .leftJoin('users as du', 'd.user_id', 'du.id')
+    .leftJoin('departments as dept', 'v.department_id', 'dept.id')
+    .where('v.patient_id', patient.id)
+    .orderBy('v.created_at', 'desc')
+    .select(
+      'v.id',
+      'v.diagnosis',
+      'v.treatment_plan',
+      'v.notes',
+      'v.vitals',
+      'v.status',
+      'v.check_in_at as visit_date',
+      'v.created_at',
+      'v.doctor_id',
+      db.raw("COALESCE(du.full_name, 'Doctor #' || v.doctor_id::text) as doctor_name"),
+      'd.specialization as doctor_specialization',
+      'dept.name_en as department_name'
+    );
+
+  return visits;
+};
+

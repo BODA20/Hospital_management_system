@@ -21,3 +21,13 @@ test_login.ts
 
 test_output_phase1.log
 test_output.log
+
+check_db.js 
+check_env.js
+check_knex.ts
+check_login.js
+test_users.js
+
+scratch
+
+hospital-frontend-old

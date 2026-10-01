@@ -20,23 +20,60 @@ for (const key of requiredEnv) {
 import { app } from './app';
 import db from './src/config/db';
 import { connectRedis, disconnectRedis } from './src/config/redis';
+import { startAppointmentWorker } from './src/jobs/appointmentWorker';
+import { autoExpireMissedAppointments } from './src/modules/appointments/services/appo.service';
 
 const PORT = process.env.PORT || 5000;
 
-// ─── Startup: DB + Redis ───────────────────────────────────────────────────────
+// ─── Startup: DB + Redis + Auto-migrate ───────────────────────────────────────
 Promise.all([
   db.raw('SELECT 1'),
   connectRedis(),
 ])
-  .then(() => {
+  .then(async () => {
     logger.info('Database and Redis connected successfully');
+
+    // Run any pending migrations automatically on every startup.
+    // This is idempotent — Knex skips migrations that have already run.
+    // It guarantees schema changes (e.g. making nurses.department_id nullable)
+    // take effect the moment the container restarts without a manual CLI step.
+    try {
+      // In development ts-node-dev compiles .ts migrations on the fly.
+      // In production the compiled .js files live in dist/migrations/.
+      const isProd = process.env.NODE_ENV === 'production';
+      const [batch, migrations] = await db.migrate.latest({
+        directory:                    isProd ? './dist/migrations' : './migrations',
+        loadExtensions:               isProd ? ['.js'] : ['.ts'],
+        // Prevents Knex from crashing when knex_migrations contains records
+        // for files that no longer exist on disk (e.g. legacy .js entries).
+        disableMigrationsListValidation: true,
+      } as any);
+      if (migrations.length === 0) {
+        logger.info('Database schema up-to-date — no pending migrations');
+      } else {
+        logger.info(`Ran ${migrations.length} migration(s) in batch ${batch}`, {
+          migrations: migrations.map((m: string) => m.split('/').pop()),
+        });
+      }
+
+      // ── Startup backfill: mark all historical past-pending as 'missed' ───────
+      const expiredCount = await autoExpireMissedAppointments();
+      logger.info(`[Startup] Auto-expire sweep complete — ${expiredCount} appointment(s) marked 'missed'`);
+      console.log(`[Startup] Auto-expire sweep complete — ${expiredCount} appointment(s) marked 'missed'`);
+
+      // Initialize background appointment worker engine (runs every 60 seconds)
+      startAppointmentWorker(60 * 1000);
+    } catch (migrationErr: any) {
+      logger.error('Migration failed on startup', { error: migrationErr.message });
+      process.exit(1);
+    }
   })
   .catch((err: Error) => {
     logger.error('Startup connection failed', { error: err.message });
     process.exit(1);
   });
 
-const server = app.listen(PORT, () => {
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
   logger.info('Hospital Management System started successfully', {
     port: PORT,
     environment: process.env.NODE_ENV || 'development',

@@ -8,6 +8,8 @@ export class appError extends Error {
     this.statusCode = statusCode;
     this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
     this.errors = errors;
+    Object.setPrototypeOf(this, appError.prototype);
     Error.captureStackTrace(this, this.constructor);
   }
 }
+

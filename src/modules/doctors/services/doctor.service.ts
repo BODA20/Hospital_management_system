@@ -87,9 +87,168 @@ export const getDoctorById = async (id: number) => {
 };
 
 // PROTECTED: GET DOCTOR APPOINTMENTS
-export const getDoctorAppointments = async (userId: number) => {
+export const getDoctorAppointments = async (userId: number, date?: string) => {
   const doctor = await doctorsRepo.findByUserId(userId);
   if (!doctor) throw new appError('Doctor profile not found', 404);
   
-  return appointmentsRepo.getByDoctor(doctor.id);
+  return appointmentsRepo.getByDoctor(doctor.id, date);
 };
+
+export interface SlotInfo {
+  slot: string;       // HH:mm (24h)
+  isBooked: boolean;
+  isPast: boolean;
+}
+
+export const getAvailableSlots = async (doctorId: number, dateStr: string): Promise<SlotInfo[]> => {
+  const doctor = await doctorsRepo.findById(doctorId);
+  if (!doctor) throw new appError('Doctor profile not found', 404);
+
+  // 1. NATIVE COMPONENT PARSING (Bypasses format & UTC timezone mismatches)
+  const now = new Date();
+  
+  let targetDate: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    targetDate = new Date(y, m - 1, d);
+  } else {
+    targetDate = new Date(dateStr);
+  }
+
+  const targetY = targetDate.getFullYear();
+  const targetM = targetDate.getMonth();
+  const targetD = targetDate.getDate();
+
+  const currentY = now.getFullYear();
+  const currentM = now.getMonth();
+  const currentD = now.getDate();
+
+  const isToday = targetY === currentY && targetM === currentM && targetD === currentD;
+  const targetTime = new Date(targetY, targetM, targetD).getTime();
+  const currentTimeBase = new Date(currentY, currentM, currentD).getTime();
+  const isPastDate = targetTime < currentTimeBase;
+
+  // 2. STRICT PAST DATE GUARD – return empty for past dates
+  if (isPastDate) {
+    return [];
+  }
+
+  const doctorUser = (doctor as any).user || await db('users').where({ id: doctor.user_id }).first();
+  const rawShift = doctorUser?.assigned_shift || 'Morning';
+  const isNightShift = String(rawShift).toLowerCase().includes('night');
+
+  // 3. Generate ALL 30-minute slots based on shift
+  const allSlots: string[] = [];
+  if (isNightShift) {
+    // Night Shift: 04:00 PM to 12:00 AM (16:00 to 24:00)
+    for (let hour = 16; hour < 24; hour++) {
+      const hStr = String(hour).padStart(2, '0');
+      allSlots.push(`${hStr}:00`);
+      allSlots.push(`${hStr}:30`);
+    }
+  } else {
+    // Day Shift: 08:00 AM to 04:00 PM (08:00 to 16:00)
+    for (let hour = 8; hour < 16; hour++) {
+      const hStr = String(hour).padStart(2, '0');
+      allSlots.push(`${hStr}:00`);
+      allSlots.push(`${hStr}:30`);
+    }
+  }
+
+  // 4. Compute current time in minutes for today's past-slot check
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentTimeInMins = currentHour * 60 + currentMinute;
+
+  // 5. Fetch booked slots
+  const normalizedDateStr = `${targetY}-${String(targetM + 1).padStart(2, '0')}-${String(targetD).padStart(2, '0')}`;
+  const bookedSlots = await doctorsRepo.getBookedSlotsForDoctor(doctorId, normalizedDateStr);
+
+  // 6. Return ALL slots with status flags (booked / past / available)
+  return allSlots.map((slot) => {
+    const isBooked = bookedSlots.some(
+      (booked) => booked.startsWith(slot) || slot.startsWith(booked),
+    );
+    const [h, m] = slot.split(':').map(Number);
+    const slotTimeInMins = h * 60 + m;
+    const isPast = isToday && slotTimeInMins <= currentTimeInMins;
+
+    return { slot, isBooked, isPast };
+  });
+};
+
+// SAVE DOCTOR NOTES & DIAGNOSIS
+export const saveDoctorNotes = async (userId: number, dto: { patient_id: number; diagnosis: string; prescriptions: string }) => {
+  const doctor = await doctorsRepo.findByUserId(userId);
+  if (!doctor) {
+    throw new appError('Doctor profile not found', 404);
+  }
+
+  const patientId = Number(dto.patient_id);
+  if (!patientId || isNaN(patientId)) {
+    throw new appError('Valid patient_id is required', 400);
+  }
+
+  const diagnosis = dto.diagnosis || '';
+  const treatmentPlan = dto.prescriptions || '';
+
+  // Check if a visit already exists for today
+  const existingVisit = await db('visits')
+    .where('patient_id', patientId)
+    .where('doctor_id', doctor.id)
+    .andWhere(function(this: any) {
+      this.whereRaw("check_in_at::date = CURRENT_DATE")
+        .orWhereRaw("created_at::date = CURRENT_DATE");
+    })
+    .orderBy('id', 'desc')
+    .first();
+
+  let visitId: number;
+
+  if (existingVisit) {
+    await db('visits')
+      .where('id', existingVisit.id)
+      .update({
+        diagnosis,
+        treatment_plan: treatmentPlan,
+        notes: treatmentPlan,
+        status: 'completed',
+        check_out_at: db.raw("NOW() + INTERVAL '1 second'"),
+      });
+    visitId = existingVisit.id;
+  } else {
+    const [newVisit] = await db('visits')
+      .insert({
+        patient_id: patientId,
+        doctor_id: doctor.id,
+        diagnosis,
+        treatment_plan: treatmentPlan,
+        notes: treatmentPlan,
+        status: 'completed',
+        check_in_at: db.fn.now(),
+        check_out_at: db.raw("NOW() + INTERVAL '1 second'"),
+      })
+      .returning('id');
+    visitId = typeof newVisit === 'object' ? (newVisit.id || newVisit) : newVisit;
+  }
+
+  // Update matching appointment status to completed if applicable
+  await db('appointments')
+    .where('patient_id', patientId)
+    .where('doctor_id', doctor.id)
+    .andWhere(function(this: any) {
+      this.whereRaw("appointment_date::date = CURRENT_DATE")
+        .orWhereRaw("starts_at::date = CURRENT_DATE");
+    })
+    .update({ status: 'completed' });
+
+  return {
+    visit_id: visitId,
+    patient_id: patientId,
+    doctor_id: doctor.id,
+    diagnosis,
+    treatment_plan: treatmentPlan,
+    status: 'completed',
+  };
+};
+

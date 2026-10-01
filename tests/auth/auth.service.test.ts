@@ -10,6 +10,26 @@ jest.mock('../../src/modules/users/repositories/user.repo', () => require('../mo
 jest.mock('../../src/modules/patients/repositories/patient.repository', () => require('../mocks/patientsRepo.mock').mockedPatientRepo);
 jest.mock('../../src/modules/auth/services/session.service', () => require('../mocks/authRepo.mock').mockedSessionService);
 
+jest.mock('../../src/config/db', () => {
+  const mockTrx = Object.assign(
+    jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnThis(),
+      update: jest.fn().mockResolvedValue(1),
+    }),
+    {}
+  );
+  return {
+    __esModule: true,
+    default: Object.assign(
+      jest.fn(),
+      {
+        transaction: jest.fn().mockImplementation(async (callback: Function) => callback(mockTrx)),
+        fn: { now: jest.fn().mockReturnValue(new Date()) },
+      }
+    ),
+  };
+});
+
 jest.mock('bcrypt', () => ({
   hash: jest.fn().mockResolvedValue('hashed_password_mock'),
   compare: jest.fn(),
@@ -23,6 +43,7 @@ const VALID_SIGNUP_BODY = {
   email: 'jane.doe@example.com',
   password: 'SecurePass1!',
   role: 'patient' as const,
+  phone: '+1234567890',
 };
 
 const VALID_LOGIN_BODY = {
@@ -85,7 +106,7 @@ describe('SERVICE: authService (Business Logic Layer)', () => {
 
     it('should return the new user and a success message', async () => {
       const result = await authService.signup(VALID_SIGNUP_BODY);
-      expect(result.message).toBe('User created successfully, please log in');
+      expect(result.message).toMatch(/registered successfully/i);
       expect(result.user).toMatchObject({
         id: MOCK_PUBLIC_USER.id,
         email: MOCK_PUBLIC_USER.email,

@@ -32,10 +32,8 @@ describe('STAFF REQUESTS SERVICE (Business Logic)', () => {
       mStaff.updateStatus.mockResolvedValue({ ...NEW_REQ, status: 'approved' } as any);
       mUser.adminUpdateUser.mockResolvedValue(undefined as any);
       mDoctor.findByUserId.mockResolvedValue(undefined as any);
-      mDoctor.createDoctor.mockResolvedValue({ id: 1, user_id: 10 } as any);
+      mDoctor.createDoctor.mockRejectedValue(new Error('DB error'));
 
-      mPatient.deleteByUserId.mockRejectedValue(new Error('DB error'));
-      
       mockedDb.transaction.mockImplementationOnce(async (cb: Function) => {
         try {
           return await cb({});
@@ -54,14 +52,12 @@ describe('STAFF REQUESTS SERVICE (Business Logic)', () => {
       mUser.adminUpdateUser.mockResolvedValue(undefined as any);
       mDoctor.findByUserId.mockResolvedValue(undefined as any);
       mDoctor.createDoctor.mockResolvedValue({ id: 1, user_id: 10 } as any);
-      mPatient.deleteByUserId.mockResolvedValue(1 as any);
 
       await staffService.approveRequest(99, 1);
 
       expect(mStaff.updateStatus).toHaveBeenCalledTimes(1);
       expect(mUser.adminUpdateUser).toHaveBeenCalledTimes(1);
       expect(mDoctor.createDoctor).toHaveBeenCalledTimes(1);
-      expect(mPatient.deleteByUserId).toHaveBeenCalledTimes(1);
     });
   });
 

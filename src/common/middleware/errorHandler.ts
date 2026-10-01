@@ -60,22 +60,16 @@ export const errorHandler: ErrorRequestHandler = (
   const isProd = process.env.NODE_ENV === 'production';
 
   logger.error(
-
     err instanceof Error
       ? err.message
       : 'Unknown error',
-
     {
       timestamp: new Date().toISOString(),
-
       path: req.originalUrl,
-
       method: req.method,
-
       ip: req.ip,
-
+      validationErrors: (err as any).errors ? JSON.stringify((err as any).errors) : undefined,
       pgCode: (err as PgError).code,
-
       stack:
         !isProd && err instanceof Error
           ? err.stack
@@ -122,16 +116,22 @@ export const errorHandler: ErrorRequestHandler = (
     });
   }
 
-  if (err instanceof appError) {
+  if (err instanceof appError || (err && typeof (err as any).statusCode === 'number')) {
+    const statusCode = (err as any).statusCode || 500;
+    const status = (err as any).status || (`${statusCode}`.startsWith('4') ? 'fail' : 'error');
 
-    return res.status(err.statusCode).json({
+    return res.status(statusCode).json({
 
-      status: err.status,
+      status,
 
       message: err.message,
 
-      ...(err.errors
-        ? { errors: err.errors }
+      ...((err as any).requiresVerification
+        ? { requiresVerification: true }
+        : {}),
+
+      ...((err as any).errors
+        ? { errors: (err as any).errors }
         : {}),
 
       ...(isProd
