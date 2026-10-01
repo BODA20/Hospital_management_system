@@ -1,5 +1,29 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+// ─── Secure Gmail SMTP Transporter (module-level singleton) ─────────────
+export const mailTransporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: Number(process.env.EMAIL_PORT) || 465,
+  secure: process.env.EMAIL_SECURE === 'true', // Must be true for port 465
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS, // Gmail 16-digit App Password
+  },
+  tls: {
+    rejectUnauthorized: true, // Enforce SSL certificate verification
+    minVersion: 'TLSv1.2',
+  },
+});
+
+// Verify SMTP connection on server boot
+mailTransporter.verify((error, _success) => {
+  if (error) {
+    console.error('❌ [Email Service] SMTP Connection Error:', error.message);
+  } else {
+    console.log('⚡ [Email Service] Gmail SMTP Transporter connected successfully and ready.');
+  }
+});
+
 
 export function generateAppointmentToken(appointmentId: number): string {
   const secret = process.env.JWT_SECRET || 'medicare_appointment_secret_key';
@@ -25,25 +49,9 @@ export class Email {
     this.to = user.email;
     this.firstName = (user.name || '').split(' ')[0] || 'User';
     this.url = url;
-    this.from = `Hospital System <${process.env.EMAIL_FROM || 'noreply@hospital.com'}>`;
+    this.from = process.env.EMAIL_FROM || 'CareOS Hospital <noreply@hospital.com>';
   }
 
-  private newTransport() {
-    if (process.env.NODE_ENV === 'production') {
-      return nodemailer.createTransport({
-        host: 'smtp.sendgrid.net',
-        port: 587,
-        secure: false,
-        auth: { user: 'apikey', pass: process.env.SENDGRID_API_KEY },
-      });
-    }
-    return nodemailer.createTransport({
-      host: process.env.MAILTRAP_HOST,
-      port: Number(process.env.MAILTRAP_PORT) || 2525,
-      secure: false,
-      auth: { user: process.env.MAILTRAP_USER, pass: process.env.MAILTRAP_PASS },
-    });
-  }
 
   private buildHTML(subject: string, bodyContent: string) {
     return `
@@ -64,8 +72,7 @@ export class Email {
 
   private async sendRaw(subject: string, html: string, textBody: string) {
     try {
-      const transporter = this.newTransport();
-      await transporter.sendMail({ from: this.from, to: this.to, subject, text: textBody, html });
+      await mailTransporter.sendMail({ from: this.from, to: this.to, subject, text: textBody, html });
     } catch (err: any) {
       if (process.env.NODE_ENV !== 'production') {
         console.log(`[DEV OTP LOG] Mailer transport failed in dev mode: ${err?.message ?? err}`);
