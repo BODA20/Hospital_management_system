@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    /* ── Target & Module ───────────────────────────────────────────────── */
+    "target": "ES2021",
+    "module": "CommonJS",
+    "lib": ["ES2021"],
+
+    /* ── Output ─────────────────────────────────────────────────────────── */
+    "outDir": "./dist",
+    "rootDir": "./", 
+
+    /* ── Strict Type Checks ──────────────────────────────────────────────── */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+
+    /* ── Module Resolution ───────────────────────────────────────────────── */
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* ── Source Maps (useful for debugging in production) ────────────────── */
+    "sourceMap": true,
+    "declaration": true,
+
+    /* ── Skip lib checks for speed ──────────────────────────────────────── */
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "server.ts", "app.ts", "knexfile.ts", "migrations/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests/**/*.ts"]
+}
