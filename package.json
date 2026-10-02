@@ -10,11 +10,15 @@
     "migrate:create": "node-pg-migrate create",
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
+    "migrate:latest": "knex --knexfile knexfile.ts migrate:latest",
     "seed": "ts-node src/seeds/runSeeds.ts",
+    "seed:dev": "ts-node src/seeds/runSeeds.ts",
+    "seed:prod": "ts-node -r dotenv/config src/database/seeds/productionSeed.ts",
     "test": "jest --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --forceExit"
   },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
