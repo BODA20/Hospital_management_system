@@ -250,11 +250,14 @@ export const getByDoctor = async (doctorId: number, date?: string) => {
         .orWhereRaw("DATE(a.starts_at AT TIME ZONE 'UTC') = ?", [date]);
     });
   } else {
-    query.andWhere(function () {
-      this.whereRaw('a.appointment_date::date = CURRENT_DATE')
-        .orWhereRaw("DATE(a.starts_at AT TIME ZONE 'UTC') = CURRENT_DATE");
+  query.andWhere(function () {
+      this.whereRaw(
+        "a.appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+      ).orWhereRaw(
+        "DATE(a.starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+      );
     });
-  }
+}
 
   const appointments = await query
     .orderBy('a.starts_at', 'asc')
