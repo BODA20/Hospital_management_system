@@ -7,6 +7,7 @@ import * as usersRepo from '../../users/repositories/user.repo';
 import * as authRepo from '../repositories/auth.repo';
 import crypto from 'crypto';
 import { Email } from '../../../common/utils/email';
+import { assertValidEmailDomain } from '../../../common/utils/dnsValidator';
 import * as sessionService from './session.service';
 import db from '../../../config/db';
 import * as patientRepo from '../../patients/repositories/patient.repository';
@@ -59,6 +60,12 @@ export async function signup(dto: SignupDTO) {
     }
     throw new appError('Email already in use', 409);
   }
+
+  // ── DNS MX domain validation ─────────────────────────────────────────────
+  // Verify the email domain has real MX records before creating a user.
+  // Runs AFTER the duplicate check so we don't waste a DNS query on repeats.
+  // assertValidEmailDomain throws 422 if the domain is unreachable/fake.
+  await assertValidEmailDomain(dto.email);
 
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
   const password_hash = await bcrypt.hash(dto.password, rounds);

@@ -10,6 +10,12 @@ jest.mock('../../src/modules/users/repositories/user.repo', () => require('../mo
 jest.mock('../../src/modules/patients/repositories/patient.repository', () => require('../mocks/patientsRepo.mock').mockedPatientRepo);
 jest.mock('../../src/modules/auth/services/session.service', () => require('../mocks/authRepo.mock').mockedSessionService);
 
+// Mock DNS validator so signup() unit tests never perform real DNS lookups
+jest.mock('../../src/common/utils/dnsValidator', () => ({
+  hasValidMxRecord: jest.fn().mockResolvedValue(true),
+  assertValidEmailDomain: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('../../src/config/db', () => {
   const mockTrx = Object.assign(
     jest.fn().mockReturnValue({
