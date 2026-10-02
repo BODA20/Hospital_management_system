@@ -31,6 +31,5 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  console.log('Cleaning up after tests...');
-  await db.destroy();
+  // Global teardown if needed
 });

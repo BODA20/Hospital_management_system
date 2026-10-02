@@ -3,6 +3,7 @@ import { protect, restrictTo } from '../../common/middleware/auth';
 import db from '../../config/db';
 import { asyncHandler } from '../../common/utils/asyncHandler';
 import { logAuditEvent } from '../audit/services/audit.service';
+import { Email } from '../../common/utils/email';
 
 const router = Router();
 
@@ -250,7 +251,7 @@ router.post(
             .insert({
               full_name: full_name.trim(),
               email: normalizedEmail,
-              phone: phone ? phone.trim() : null,
+              phone: phone && phone.trim() ? phone.trim() : 'NOT_PROVIDED',
               password_hash: passwordHash,
               role: targetRole,
               is_active: true,
@@ -300,17 +301,31 @@ router.post(
           }
         }
 
-        // Log audit trail
-        await trx('security_logs').insert({
-          user_id: adminId,
-          actor_name: actorName,
-          action_type: 'STAFF_CREATED',
-          description: `Admin directly created staff account for ${full_name} (Role: ${targetRole}, Shift: ${userShift}, Email: ${email}).`,
-          ip_address: clientIp,
-        });
+        // Log audit trail (guarded so audit schema issues don't crash staff creation)
+        try {
+          await trx('security_logs').insert({
+            user_id: adminId,
+            actor_name: actorName,
+            action_type: 'STAFF_CREATED',
+            description: `Admin directly created staff account for ${full_name} (Role: ${targetRole}, Shift: ${userShift}, Email: ${email}).`,
+            ip_address: clientIp,
+          });
+        } catch (auditErr) {
+          console.warn('⚠️ [Audit Log Warning] Could not insert security log:', auditErr);
+        }
 
         return createdOrUpdatedUser;
       });
+
+      // Non-blocking email dispatch (failure must NOT fail the HTTP response)
+      try {
+        if (result && result.email) {
+          const mailer = new Email({ email: result.email, name: result.full_name }, '');
+          await mailer.sendStaffApproval(targetRole, userShift);
+        }
+      } catch (emailErr: any) {
+        console.warn('⚠️ [Email Service Warning] Failed to send staff creation email:', emailErr?.message || emailErr);
+      }
 
       res.status(201).json({
         status: 'success',
@@ -319,9 +334,10 @@ router.post(
       });
     } catch (err: any) {
       console.error('CRITICAL ERROR in create staff account:', err);
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error while creating staff account.',
+      const statusCode = err.statusCode || 500;
+      res.status(statusCode).json({
+        status: statusCode >= 500 ? 'error' : 'fail',
+        message: err.message || 'Internal server error while creating staff account.',
         error: err.message,
       });
     }

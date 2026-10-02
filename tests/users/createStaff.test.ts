@@ -14,7 +14,7 @@
  */
 
 import request from 'supertest';
-import app from '../../app';
+import { app } from '../../app';
 import db from '../../src/config/db';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -31,7 +31,7 @@ function makeToken(payload: { id: number; role: string }): string {
 /** Clean up any test-inserted users by email patterns used in this suite. */
 async function cleanup(...emails: string[]) {
   for (const email of emails) {
-    const user = await db('users').where({ email }).first();
+    const user = (await db('users').where({ email }).first()) as any;
     if (user) {
       await db('doctors').where({ user_id: user.id }).delete();
       await db('nurses').where({ user_id: user.id }).delete();
@@ -52,9 +52,10 @@ let adminToken: string;
 // ─────────────────────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
+  await cleanup(ADMIN_EMAIL, NEW_DOCTOR_EMAIL, NEW_NURSE_EMAIL);
   // Seed a real admin row so the test hits the real DB path
   const hash = await bcrypt.hash('Admin123!', 4); // low rounds — speed only for tests
-  const [admin] = await db('users')
+  const [admin] = await (db('users') as any)
     .insert({
       full_name: 'Regression Test Admin',
       email: ADMIN_EMAIL,
@@ -79,7 +80,9 @@ afterEach(async () => {
   // Clean new staff entries after each test so tests are independent
   await cleanup(NEW_DOCTOR_EMAIL, NEW_NURSE_EMAIL);
   // Also remove any audit rows (security_logs) for our test admin
-  await db('security_logs').where({ user_id: adminId }).delete();
+  if (adminId) {
+    await db('security_logs').where({ user_id: adminId }).delete();
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -105,7 +108,7 @@ describe('POST /api/v1/admins/staff/create', () => {
       expect(res.body.status).toBe('success');
 
       // Confirm a brand-new user row was created
-      const created = await db('users').where({ email: NEW_DOCTOR_EMAIL }).first();
+      const created = (await db('users').where({ email: NEW_DOCTOR_EMAIL }).first()) as any;
       expect(created).toBeDefined();
       expect(created.role).toBe('doctor');
       expect(created.email).toBe(NEW_DOCTOR_EMAIL);
@@ -123,8 +126,8 @@ describe('POST /api/v1/admins/staff/create', () => {
           specialization: 'Neurology',
         });
 
-      const user = await db('users').where({ email: NEW_DOCTOR_EMAIL }).first();
-      const doctor = await db('doctors').where({ user_id: user.id }).first();
+      const user = (await db('users').where({ email: NEW_DOCTOR_EMAIL }).first()) as any;
+      const doctor = (await db('doctors').where({ user_id: user.id }).first()) as any;
       expect(doctor).toBeDefined();
       expect(doctor.specialization).toBe('Neurology');
     });
@@ -137,7 +140,7 @@ describe('POST /api/v1/admins/staff/create', () => {
 
     it('does NOT modify the logged-in admin row when no phone is supplied', async () => {
       // Snapshot admin state before the request
-      const adminBefore = await db('users').where({ id: adminId }).first();
+      const adminBefore = (await db('users').where({ id: adminId }).first()) as any;
 
       await request(app)
         .post('/api/v1/admins/staff/create')
@@ -151,7 +154,7 @@ describe('POST /api/v1/admins/staff/create', () => {
         });
 
       // Admin row must be bitwise-identical after the call
-      const adminAfter = await db('users').where({ id: adminId }).first();
+      const adminAfter = (await db('users').where({ id: adminId }).first()) as any;
 
       expect(adminAfter.id).toBe(adminBefore.id);
       expect(adminAfter.email).toBe(adminBefore.email);
@@ -176,7 +179,7 @@ describe('POST /api/v1/admins/staff/create', () => {
       expect(res.body.message ?? res.body.error).toMatch(/logged-in admin/i);
 
       // Admin role must be unchanged
-      const admin = await db('users').where({ id: adminId }).first();
+      const admin = (await db('users').where({ id: adminId }).first()) as any;
       expect(admin.role).toBe('admin');
     });
 

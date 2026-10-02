@@ -1,5 +1,11 @@
 import knex, { Knex } from 'knex';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+if (process.env.NODE_ENV === 'test') {
+  dotenv.config({ path: '.env.test', override: true });
+} else {
+  dotenv.config();
+}
 // ─── Startup Env Validation ────────────────────────────────────────────────────
 // Fail loudly at boot time instead of silently using wrong credentials.
 const requiredDbEnv = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'] as const;
@@ -12,11 +18,15 @@ for (const key of requiredDbEnv) {
 // Raw DB row shape — matches actual column names in the database
 interface UsersDbRow {
   id?: number;
-  name: string;
+  full_name?: string;
+  name?: string;
   email: string;
+  phone?: string | null;
   password_hash: string;
   role: string;
+  assigned_shift?: string;
   is_active?: boolean;
+  is_verified?: boolean;
   refresh_token?: string | null;
   created_at?: Date;
   updated_at?: Date;
