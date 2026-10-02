@@ -20,17 +20,20 @@ export const UsersManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'staff' | 'patients'>('staff');
   const toast = useToast();
 
-  // Create Staff Modal
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newStaff, setNewStaff] = useState({
+  const EMPTY_STAFF_FORM = {
     full_name: '',
     email: '',
     phone: '',
     role: 'doctor' as UserRole,
     department_id: '',
     assigned_shift: 'Morning',
+    specialization: '',
     password: '',
-  });
+  };
+
+  // Create Staff Modal
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newStaff, setNewStaff] = useState({ ...EMPTY_STAFF_FORM });
 
   // Assign Dept / Shift Modal
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -64,9 +67,11 @@ export const UsersManagement: React.FC = () => {
       await adminService.createStaffAccount({
         ...newStaff,
         department_id: newStaff.department_id ? Number(newStaff.department_id) : undefined,
+        specialization: newStaff.specialization.trim() || undefined,
       });
       toast.success('Staff Account Created', `Created ${newStaff.role} account for ${newStaff.full_name}`);
       setIsCreateModalOpen(false);
+      setNewStaff({ ...EMPTY_STAFF_FORM }); // reset form so next open starts clean
       fetchData();
     } catch (err: any) {
       toast.error('Creation Failed', err.response?.data?.message || 'Failed to create staff account.');
@@ -179,16 +184,21 @@ export const UsersManagement: React.FC = () => {
       />
 
       {/* Create Staff Modal */}
-      <Modal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create Staff Account" maxWidth="md">
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => { setIsCreateModalOpen(false); setNewStaff({ ...EMPTY_STAFF_FORM }); }}
+        title="Create Staff Account"
+        maxWidth="md"
+      >
         <form onSubmit={handleCreateStaff} className="space-y-4">
           <Input label="Full Name" required value={newStaff.full_name} onChange={(e) => setNewStaff({ ...newStaff, full_name: e.target.value })} />
           <Input label="Email" type="email" required value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} />
           <Input label="Phone" type="tel" value={newStaff.phone} onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })} />
-          
+
           <Select
             label="Staff Role"
             value={newStaff.role}
-            onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value as UserRole })}
+            onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value as UserRole, specialization: '' })}
             options={[
               { label: 'Doctor', value: 'doctor' },
               { label: 'Nurse', value: 'nurse' },
@@ -196,6 +206,15 @@ export const UsersManagement: React.FC = () => {
               { label: 'Administrator', value: 'admin' },
             ]}
           />
+
+          {newStaff.role === 'doctor' && (
+            <Input
+              label="Specialization"
+              placeholder="e.g. Cardiology, Pediatrics"
+              value={newStaff.specialization}
+              onChange={(e) => setNewStaff({ ...newStaff, specialization: e.target.value })}
+            />
+          )}
 
           <Select
             label="Department"

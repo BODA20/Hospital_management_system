@@ -186,19 +186,45 @@ router.post(
       const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
 
       const result = await db.transaction(async (trx) => {
-        // Check existing user by email or phone
-        const existing = await (trx('users') as any)
-          .where('email', email.toLowerCase().trim())
-          .orWhere(function (this: any) {
-            if (phone) this.where('phone', phone.trim());
-          })
+        // ── FIX: Look up ONLY by the target email from req.body ─────────────
+        // The previous `orWhere(callback)` was a Knex footgun:
+        // an empty callback (when phone is blank) silently matches ALL rows,
+        // so .first() returned the FIRST user in the DB — typically the admin —
+        // causing the UPDATE branch to overwrite the logged-in admin's role.
+        //
+        // Correct approach: deduplicate strictly on email first. Only when a
+        // phone is explicitly provided AND no email match exists do we fall back
+        // to a secondary phone-uniqueness check.
+        const normalizedEmail = email.toLowerCase().trim();
+        let existing = await trx('users')
+          .where('email', normalizedEmail)
           .first();
+
+        // Secondary phone dedup — only when phone is supplied AND no email hit
+        if (!existing && phone && phone.trim()) {
+          existing = await trx('users')
+            .where('phone', phone.trim())
+            .first();
+        }
+
+        // ── Self-overwrite guard ─────────────────────────────────────────────
+        // Block the admin from accidentally targeting their own account when
+        // the submitted email/phone resolves back to the logged-in user.
+        if (existing && Number(existing.id) === Number(adminId)) {
+          throw Object.assign(
+            new Error(
+              'Cannot modify the currently logged-in admin account via this endpoint. ' +
+              'Use a different email address for the new staff member.',
+            ),
+            { statusCode: 400 },
+          );
+        }
 
         let userId: number;
         let createdOrUpdatedUser: any;
 
         if (existing) {
-          // Promote existing user to staff
+          // Promote an existing account (e.g. a patient) to a staff role
           const updates: any = {
             full_name: full_name.trim(),
             role: targetRole,
@@ -219,11 +245,11 @@ router.post(
           userId = Number(existing.id);
           createdOrUpdatedUser = updated;
         } else {
-          // Insert new staff user
+          // Insert a brand-new staff user
           const [newUser] = await (trx('users') as any)
             .insert({
               full_name: full_name.trim(),
-              email: email.toLowerCase().trim(),
+              email: normalizedEmail,
               phone: phone ? phone.trim() : null,
               password_hash: passwordHash,
               role: targetRole,
@@ -236,6 +262,7 @@ router.post(
           userId = Number(newUser.id);
           createdOrUpdatedUser = newUser;
         }
+
 
         // Auto-provision profile
         if (targetRole === 'doctor') {
