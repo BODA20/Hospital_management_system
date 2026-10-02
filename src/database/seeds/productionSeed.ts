@@ -189,7 +189,7 @@ async function seedAdmin(): Promise<void> {
            password_hash = EXCLUDED.password_hash,
            role          = EXCLUDED.role,
            is_active     = true,
-           is_verified   = true,
+           is_verified   = true
      RETURNING id, email,
        (xmax = 0) AS inserted`,
     [ADMIN.full_name, ADMIN.email, password_hash, ADMIN.role, ADMIN.phone],
