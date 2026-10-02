@@ -197,8 +197,10 @@ export const saveDoctorNotes = async (userId: number, dto: { patient_id: number;
     .where('patient_id', patientId)
     .where('doctor_id', doctor.id)
     .andWhere(function(this: any) {
-      this.whereRaw("check_in_at::date = CURRENT_DATE")
-        .orWhereRaw("created_at::date = CURRENT_DATE");
+      this.whereRaw(
+        "DATE(check_in_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date" +
+        " OR DATE(created_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+      );
     })
     .orderBy('id', 'desc')
     .first();
@@ -237,8 +239,10 @@ export const saveDoctorNotes = async (userId: number, dto: { patient_id: number;
     .where('patient_id', patientId)
     .where('doctor_id', doctor.id)
     .andWhere(function(this: any) {
-      this.whereRaw("appointment_date::date = CURRENT_DATE")
-        .orWhereRaw("starts_at::date = CURRENT_DATE");
+      this.whereRaw(
+        "appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date" +
+        " OR DATE(starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+      );
     })
     .update({ status: 'completed' });
 

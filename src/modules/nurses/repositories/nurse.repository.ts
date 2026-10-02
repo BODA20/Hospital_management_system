@@ -91,13 +91,14 @@ export interface VitalsQueueItem {
   time_slot?: string | null;
   status: string;
   queue_status?: string | null;
+  queue_number?: string | number | null;
   is_appointment: boolean;
   is_missed?: boolean;
 }
 
 export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
   try {
-    // 1. Fetch visits awaiting vitals strictly checked-in or created TODAY (CURRENT_DATE)
+    // 1. Fetch visits awaiting vitals strictly checked-in or created TODAY in Africa/Cairo date
     const visits = await db('visits as v')
       .leftJoin('patients as p', 'v.patient_id', 'p.id')
       .leftJoin('users as pu', 'p.user_id', 'pu.id')
@@ -105,8 +106,10 @@ export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
       .leftJoin('users as du', 'd.user_id', 'du.id')
       .whereIn('v.status', ['awaiting_vitals', 'in_progress'])
       .andWhere(function (this: any) {
-        this.whereRaw("v.check_in_at::date = CURRENT_DATE")
-          .orWhereRaw("v.created_at::date = CURRENT_DATE");
+        this.whereRaw(
+          "DATE(v.check_in_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date" +
+          " OR DATE(v.created_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+        );
       })
       .andWhere(function (this: any) {
         this.whereNull('v.vitals').orWhereIn('v.status', ['awaiting_vitals', 'in_progress']);
@@ -128,9 +131,7 @@ export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
       )
       .orderBy('v.check_in_at', 'asc');
 
-    // 2. 24-HOUR AUTO FLUSH DATE FILTER:
-    //    STRICTLY fetch appointments where appointment_date = CURRENT_DATE or starts_at::date = CURRENT_DATE.
-    //    Past dates (e.g., yesterday) MUST NOT load into the active queue.
+    // 2. Fetch appointments for TODAY in Africa/Cairo date
     const appointments = await db('appointments as a')
       .leftJoin('patients as p', 'a.patient_id', 'p.id')
       .leftJoin('users as pu', 'p.user_id', 'pu.id')
@@ -139,10 +140,10 @@ export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
       .leftJoin('visits as v', 'a.id', 'v.appointment_id')
       .whereIn('a.status', ['confirmed', 'scheduled', 'pending', 'in_progress'])
       .andWhere(function (this: any) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        this.whereRaw("a.starts_at::date = CURRENT_DATE")
-          .orWhereRaw("a.appointment_date::date = CURRENT_DATE")
-          .orWhere('a.appointment_date', todayStr);
+        this.whereRaw(
+          "a.appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date" +
+          " OR DATE(a.starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+        );
       })
       .andWhere(function (this: any) {
         this.whereNull('v.id').orWhereNotIn('v.status', ['completed', 'cancelled']);
@@ -158,6 +159,7 @@ export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
         'a.reason as chief_complaint',
         'a.queue_status',
         'a.status as appt_status',
+        'a.queue_number',
         db.raw("COALESCE(pu.full_name, 'Patient #' || a.patient_id::text) as patient_name"),
         'pu.email as patient_email',
         'pu.phone as patient_phone',
@@ -185,6 +187,7 @@ export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
         starts_at: v.check_in_at,
         status: v.status || 'awaiting_vitals',
         queue_status: 'ready_for_vitals',
+        queue_number: null,
         is_appointment: false,
         is_missed: false,
       });
@@ -227,6 +230,7 @@ export const getVitalsQueue = async (): Promise<VitalsQueueItem[]> => {
           time_slot: a.time_slot,
           status: isMissed ? 'no_show' : 'awaiting_vitals',
           queue_status: isMissed ? 'missed' : (a.queue_status || 'ready_for_vitals'),
+          queue_number: a.queue_number || null,
           is_appointment: !a.visit_id,
           is_missed: isMissed,
         });

@@ -19,7 +19,7 @@ export const autoExpireMissedAppointments = async (scope?: {
   const query = db('appointments')
     .where('status', 'pending')
     .andWhere(function () {
-      this.whereRaw("appointment_date < CURRENT_DATE")
+      this.whereRaw("appointment_date < (NOW() AT TIME ZONE 'Africa/Cairo')::date")
         .orWhereRaw("ends_at < (NOW() - interval '12 hours')");
     });
 

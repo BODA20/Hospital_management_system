@@ -46,17 +46,17 @@ visitsRouter.get(
   visitController.getByAppointmentId,
 );
 
-// ─── Nurse: record vitals ──────────────────────────────────────────────────────
+// ─── Nurse / Admin: record vitals ──────────────────────────────────────────────
 visitsRouter.patch(
   '/:id/vitals',
-  restrictTo('nurse'),
+  restrictTo('nurse', 'admin'),
   validate(recordVitalsSchema),
   visitController.recordVitals,
 );
 
 visitsRouter.post(
   '/:id/vitals',
-  restrictTo('nurse'),
+  restrictTo('nurse', 'admin'),
   validate(recordVitalsSchema),
   visitController.recordVitals,
 );

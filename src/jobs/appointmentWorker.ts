@@ -33,7 +33,7 @@ export const processUpcomingAppointments = async (): Promise<ProcessedAppointmen
             .orWhereNot('a.queue_status', 'ready_for_vitals');
         })
         .andWhere(function () {
-          this.whereRaw("a.starts_at::date = CURRENT_DATE OR a.appointment_date::date = CURRENT_DATE")
+          this.whereRaw("a.appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date OR DATE(a.starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date")
             .orWhereRaw("a.starts_at <= NOW() + INTERVAL '60 minutes'")
             .orWhereRaw("a.starts_at IS NULL AND (a.appointment_date::text || ' ' || COALESCE(SPLIT_PART(a.time_slot, '-', 1), '00:00'))::timestamp <= NOW() + INTERVAL '60 minutes'");
         })

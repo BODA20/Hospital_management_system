@@ -199,11 +199,9 @@ export const recordVitals = async (
   vitalsData: Vitals,
   nurseUserId: number,
 ) => {
-  // 1. Resolve the nurse profile from the authenticated user's ID
+  // 1. Resolve the nurse profile from the authenticated user's ID (optional lookup)
   const nurse = await nurseRepo.findByUserId(nurseUserId);
-  if (!nurse) {
-    throw new appError('Nurse profile not found for this user', 404);
-  }
+  const nurseProfileId = nurse ? nurse.id : null;
 
   // 2. Verify the visit exists
   const visit = await visitRepo.findRawById(visitId);
@@ -220,7 +218,7 @@ export const recordVitals = async (
   }
 
   // 4. Save vitals and transition status → ready_for_doctor
-  await visitRepo.recordVitals(visitId, vitalsData, nurse.id);
+  await visitRepo.recordVitals(visitId, vitalsData, nurseProfileId);
 
   // 5. Stamp the linked appointment's queue_status so the queue board
   //    reflects that vitals are done without changing the main status.
