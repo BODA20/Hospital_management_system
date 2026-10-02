@@ -244,8 +244,8 @@ export const getDoctorDailySchedule = async (userId: number) => {
   const doctor = await doctorsRepo.findByUserId(userId);
   if (!doctor) throw new appError('Doctor profile not found', 404);
 
-  const today = new Date();
-  const rawAppointments = await appointmentsRepo.getDoctorDailySchedule(doctor.id, today);
+  // All date logic now lives inside the SQL query (Africa/Cairo timezone).
+  const rawAppointments = await appointmentsRepo.getDoctorDailySchedule(doctor.id);
   const appointments = rawAppointments.map((a: any) => {
     const hasContact = a.patient_phone || a.phone || a.patient_email || a.email;
     if (!hasContact) {
@@ -262,8 +262,12 @@ export const getDoctorDailySchedule = async (userId: number) => {
     (a: any) => a.status === 'completed',
   ).length;
 
+  // Report the Cairo local date so the UI date label is correct.
+  const cairoDateStr = new Date()
+    .toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); // YYYY-MM-DD
+
   return {
-    date: today.toISOString().split('T')[0],
+    date: cairoDateStr,
     total: appointments.length,
     remaining,
     completed,

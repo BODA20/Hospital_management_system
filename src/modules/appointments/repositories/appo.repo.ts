@@ -346,23 +346,18 @@ export const getAllAppointments = (filters: {
 };
 
 // ─── Get Doctor Daily Schedule ─────────────────────────────────────────────────
-export const getDoctorDailySchedule = (doctorId: number, date: Date) => {
-  const dateStr = date.toISOString().split('T')[0];
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-
+// NOTE: Date comparison is done in PostgreSQL using the Africa/Cairo timezone so
+// that the "today" boundary is local midnight Cairo, not UTC midnight.  This
+// mirrors the fix already applied to getByDoctor.
+export const getDoctorDailySchedule = (doctorId: number) => {
   return db('appointments as a')
     .join('patients as p', 'a.patient_id', 'p.id')
     .join('users as pu', 'p.user_id', 'pu.id')
     .where('a.doctor_id', doctorId)
     .andWhere(function () {
-      this.whereBetween('a.starts_at', [startOfDay, endOfDay])
-        .orWhere('a.appointment_date', dateStr)
-        .orWhereRaw("a.starts_at::date = CURRENT_DATE")
-        .orWhereRaw("a.appointment_date::date = CURRENT_DATE");
+      this
+        .whereRaw("a.appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date")
+        .orWhereRaw("DATE(a.starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date");
     })
     .whereIn('a.status', ['pending', 'scheduled', 'confirmed', 'in_progress', 'completed'])
     .orderBy('a.starts_at', 'asc')
