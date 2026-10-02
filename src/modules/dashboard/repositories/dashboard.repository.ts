@@ -1,47 +1,101 @@
 import db from '../../../config/db';
 
-// ?????? Global Hospital Stats (existing – unchanged) ????????????????????????????????????????????????????????????????
+// ── Global Hospital Stats ──────────────────────────────────────────────────────
+// All "today" comparisons use Africa/Cairo local date to match application
+// timezone, consistent with the fix already applied to the appointments module.
 export const getGlobalStats = async () => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
+  const [
+    [{ count: total_patients }],
+    [{ count: total_doctors }],
+    [{ count: total_nurses }],
+    [{ count: today_appointments }],
+    [{ count: today_attended }],
+    [{ sum: revenue_this_month }],
+    [{ count: pending_applications }],
+    dept_activity,
+  ] = await Promise.all([
+    // Total patients
+    db('patients').count('id as count'),
 
-  const [[{ count: total_patients }], [{ count: total_doctors }]] =
-    await Promise.all([
-      db('patients').count('id as count'),
-      db('doctors').count('id as count'),
-    ]);
+    // Active doctors (any doctor profile = active)
+    db('doctors').count('id as count'),
 
-  const [{ count: today_appointments }] = await db('appointments')
-    .count('id as count')
-    .where('starts_at', '>=', todayStart)
-    .where('starts_at', '<', todayEnd);
+    // Nurse staff rows
+    db('nurses').count('id as count'),
 
-  const [{ count: today_attended }] = await db('visits')
-    .count('id as count')
-    .where('check_in_at', '>=', todayStart)
-    .where('check_in_at', '<', todayEnd)
-    .andWhere('status', 'completed');
+    // Appointments TODAY — Cairo local date (mirrors appo.repo.ts fix)
+    db('appointments')
+      .count('id as count')
+      .whereRaw(
+        "appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date" +
+        " OR DATE(starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+      )
+      .whereNotIn('status', ['cancelled', 'no_show']),
 
-  const dept_activity = await db('appointments as a')
-    .join('doctors as d', 'a.doctor_id', 'd.id')
-    .join('departments as dept', 'd.department_id', 'dept.id')
-    .select('dept.name_en as department')
-    .count('a.id as appointment_count')
-    .where('a.starts_at', '>=', todayStart)
-    .where('a.starts_at', '<', todayEnd)
-    .groupBy('dept.id', 'dept.name_en')
-    .orderBy('appointment_count', 'desc');
+    // Visits checked in today (Cairo date) with completed status
+    db('visits')
+      .count('id as count')
+      .whereRaw("DATE(check_in_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date")
+      .where('status', 'completed'),
+
+    // Revenue this calendar month (Cairo month boundary)
+    db('invoices')
+      .sum('final_amount as sum')
+      .where('status', 'paid')
+      .whereRaw(
+        "DATE_TRUNC('month', created_at AT TIME ZONE 'UTC') = DATE_TRUNC('month', NOW() AT TIME ZONE 'Africa/Cairo')"
+      ),
+
+    // Pending staff applications
+    db('staff_applications').count('id as count').where('status', 'pending'),
+
+    // Department activity today
+    db('appointments as a')
+      .join('doctors as d', 'a.doctor_id', 'd.id')
+      .join('departments as dept', 'd.department_id', 'dept.id')
+      .select('dept.name_en as department', 'dept.code as code')
+      .count('a.id as appointment_count')
+      .whereRaw(
+        "a.appointment_date = (NOW() AT TIME ZONE 'Africa/Cairo')::date" +
+        " OR DATE(a.starts_at AT TIME ZONE 'UTC') = (NOW() AT TIME ZONE 'Africa/Cairo')::date"
+      )
+      .whereNotIn('a.status', ['cancelled', 'no_show'])
+      .groupBy('dept.id', 'dept.name_en', 'dept.code')
+      .orderBy('appointment_count', 'desc'),
+  ]);
+
+  const today_attended_n = Number(today_attended);
+  const today_appointments_n = Number(today_appointments);
+  const today_missed = Math.max(0, today_appointments_n - today_attended_n);
+  const attendance_percentage =
+    today_appointments_n > 0
+      ? Math.round((today_attended_n / today_appointments_n) * 100)
+      : 0;
 
   return {
+    // Flat fields for the KPI cards (matches AdminSummaryStats interface)
     total_patients: Number(total_patients),
     total_doctors: Number(total_doctors),
-    today_appointments: Number(today_appointments),
-    today_attended: Number(today_attended),
-    dept_activity,
+    total_nurses: Number(total_nurses),
+    appointments_today: today_appointments_n,
+    revenue_this_month: Number(revenue_this_month ?? 0),
+    pending_applications: Number(pending_applications),
+
+    // Extended analytics (kept for backward-compat with other consumers)
+    today_attended: today_attended_n,
+    today_missed,
+    analytics: {
+      attendance_percentage,
+      attendance_label: "% of today's appointments attended",
+      dept_activity: dept_activity.map((d: any) => ({
+        department: d.department,
+        code: d.code,
+        appointment_count: Number(d.appointment_count),
+      })),
+    },
   };
 };
+
 
 /**
  * Consolidated Comparative Metrics for Dashboard
