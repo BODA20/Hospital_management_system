@@ -152,7 +152,7 @@ export const NotificationBell: React.FC = () => {
           id="notification-panel"
           role="dialog"
           aria-label="Notifications panel"
-          className="absolute right-0 mt-2 w-96 max-h-[520px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 flex flex-col animate-fade-in"
+          className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm max-h-[520px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-50 flex flex-col animate-fade-in"
           style={{ boxShadow: '0 20px 60px -12px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.04)' }}
         >
           {/* Header */}

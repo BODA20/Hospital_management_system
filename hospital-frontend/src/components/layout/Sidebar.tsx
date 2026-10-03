@@ -18,17 +18,24 @@ import {
   User,
   HeartPulse,
   LogOut,
+  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  /** Whether the mobile overlay is open */
+  mobileOpen?: boolean;
+  /** Called when the user dismisses the mobile sidebar */
+  onMobileClose?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, onMobileClose }) => {
   const { user, logout } = useAuth();
 
   if (!user) return null;
 
   const role = user.role;
 
-  // Define Navigation Items based on Role
   const navItemsByRole: Record<string, { label: string; to: string; icon: React.ReactNode }[]> = {
     admin: [
       { label: 'Overview', to: '/admin/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -71,18 +78,28 @@ export const Sidebar: React.FC = () => {
 
   const currentNav = navItemsByRole[role] || [];
 
-  return (
-    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 h-screen sticky top-0 border-r border-slate-800 z-30">
+  const sidebarContent = (
+    <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between h-full border-r border-slate-800">
       <div>
         {/* Brand Header */}
         <div className="h-16 flex items-center px-6 border-b border-slate-800 gap-3">
           <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center text-white font-bold shadow-sm">
             <HeartPulse className="w-5 h-5" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-bold text-white text-base leading-tight tracking-tight">CareOS</h1>
             <p className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">Hospital Mgmt System</p>
           </div>
+          {/* Close button — only shown on mobile */}
+          {onMobileClose && (
+            <button
+              onClick={onMobileClose}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              aria-label="Close navigation"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Workspace Role Label */}
@@ -99,9 +116,10 @@ export const Sidebar: React.FC = () => {
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={onMobileClose}
               className={({ isActive }) =>
                 clsx(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all min-h-[44px]',
                   isActive
                     ? 'bg-teal-600 text-white font-semibold shadow-sm'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-white'
@@ -131,12 +149,37 @@ export const Sidebar: React.FC = () => {
           <button
             onClick={() => logout()}
             title="Sign out"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* ── Desktop: static sidebar ─────────────────────────────────────── */}
+      <div className="hidden lg:flex w-64 shrink-0 h-screen sticky top-0 z-30">
+        {sidebarContent}
+      </div>
+
+      {/* ── Mobile: overlay sidebar ──────────────────────────────────────── */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={onMobileClose}
+            aria-hidden="true"
+          />
+          {/* Sidebar panel */}
+          <div className="relative z-50 flex h-full w-64 max-w-[80vw]">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

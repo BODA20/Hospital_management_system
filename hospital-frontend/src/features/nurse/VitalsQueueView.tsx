@@ -116,7 +116,7 @@ export const VitalsQueueView: React.FC = () => {
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={`Record Vitals — ${selectedItem?.patient_name || 'Patient'}`}>
         <form onSubmit={handleRecordVitals} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Blood Pressure (bp)" placeholder="120/80" value={bp} onChange={(e) => setBp(e.target.value)} required />
             <Input label="Pulse (bpm)" type="number" placeholder="72" value={pulse} onChange={(e) => setPulse(e.target.value)} required />
             <Input label="Temperature (°C)" type="number" step="0.1" placeholder="36.6" value={temperature} onChange={(e) => setTemperature(e.target.value)} required />
