@@ -24,8 +24,7 @@ export const autoExpireMissedAppointments = async (scope?: {
     })
     .andWhere(function () {
       this.whereRaw("appointment_date < (NOW() AT TIME ZONE 'Africa/Cairo')::date")
-        .orWhereRaw("starts_at < (NOW() - interval '30 minutes')")
-        .orWhereRaw("starts_at IS NULL AND (appointment_date::text || ' ' || COALESCE(SPLIT_PART(time_slot, '-', 1), '00:00'))::timestamp < (NOW() AT TIME ZONE 'Africa/Cairo' - interval '30 minutes')");
+        .orWhereRaw("(appointment_date::text || ' ' || COALESCE(NULLIF(BTRIM(SPLIT_PART(time_slot, '-', 1)), ''), '00:00'))::timestamp < (NOW() AT TIME ZONE 'Africa/Cairo' - interval '30 minutes')");
     });
 
   // Apply scope filters BEFORE .update() so they are included in the WHERE clause

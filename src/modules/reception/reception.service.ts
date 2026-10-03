@@ -321,6 +321,7 @@ export const getTodayQueue = async (dateParam?: string) => {
         .orWhereRaw("DATE(a.starts_at AT TIME ZONE 'UTC') = ?", [targetDate])
         .orWhereRaw("DATE(a.appointment_date AT TIME ZONE 'UTC') = ?", [targetDate]);
     })
+    .where('du.role', 'doctor')
     .whereRaw("LOWER(a.status::text) NOT IN ('cancelled', 'no_show', 'rejected', 'missed')")
     .orderByRaw('d.id, COALESCE(a.queue_number, 9999), a.starts_at, a.time_slot')
     .select(
@@ -349,6 +350,7 @@ export const getTodayQueue = async (dateParam?: string) => {
     .join('users as u', 'd.user_id', 'u.id')
     .leftJoin('departments as dept', 'd.department_id', 'dept.id')
     .where('u.is_active', true)
+    .where('u.role', 'doctor')
     .select(
       'd.id as doctor_id',
       'u.full_name as doctor_name',
@@ -439,6 +441,7 @@ export const getDoctors = async () => {
     .join('users as u', 'd.user_id', 'u.id')
     .leftJoin('departments as dept', 'd.department_id', 'dept.id')
     .where('u.is_active', true)
+    .where('u.role', 'doctor')
     .select(
       'd.id',
       'u.full_name as name',
