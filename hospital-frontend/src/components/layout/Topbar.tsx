@@ -1,7 +1,8 @@
 import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Bell, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { ShieldCheck, User as UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { NotificationBell } from './NotificationBell';
 
 export const Topbar: React.FC = () => {
   const { user } = useAuth();
@@ -31,13 +32,8 @@ export const Topbar: React.FC = () => {
 
       {/* Right controls */}
       <div className="flex items-center gap-4">
-        <button
-          title="Notifications"
-          className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors relative"
-        >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-teal-600" />
-        </button>
+        {/* Notification Bell — connected to /api/v1/notifications */}
+        <NotificationBell />
 
         <div className="h-4 w-px bg-slate-200" />
 
