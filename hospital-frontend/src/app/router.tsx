@@ -308,6 +308,14 @@ const router = createBrowserRouter([
     ),
   },
 
+  // Section Base Path Redirects
+  { path: '/admin', element: <Navigate to="/admin/dashboard" replace /> },
+  { path: '/doctor', element: <Navigate to="/doctor/dashboard" replace /> },
+  { path: '/nurse', element: <Navigate to="/nurse/dashboard" replace /> },
+  { path: '/patient', element: <Navigate to="/patient/dashboard" replace /> },
+  { path: '/reception', element: <Navigate to="/reception/dashboard" replace /> },
+  { path: '/', element: <Navigate to="/patient/dashboard" replace /> },
+
   // Default Fallback
   { path: '*', element: <Navigate to="/login" replace /> },
 ]);
