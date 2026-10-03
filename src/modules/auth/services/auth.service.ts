@@ -70,8 +70,7 @@ export async function signup(dto: SignupDTO) {
   const rounds = Number(process.env.BCRYPT_SALT_ROUNDS || 12);
   const password_hash = await bcrypt.hash(dto.password, rounds);
 
-  const role = dto.role ? (dto.role as UserRole) : UserRole.PATIENT;
-
+const role = UserRole.PATIENT;
   const user = await db.transaction(async (trx) => {
     const newUser = await usersRepo.createUser(
       {
