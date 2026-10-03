@@ -144,7 +144,7 @@ export const DoctorDirectoryView: React.FC = () => {
       navigate('/patient/checkout', {
         state: {
           appointmentId:  appt?.id,
-          doctorName:     selectedDoc.full_name || selectedDoc.name || 'Doctor',
+          doctorName:     `Dr. ${selectedDoc.full_name || selectedDoc.name || 'Doctor'}`,
           doctorSpecialty: selectedDoc.specialization || 'Specialist',
           timeSlot:       fmt12h(timeSlot),
           appointmentDate,
@@ -190,7 +190,7 @@ export const DoctorDirectoryView: React.FC = () => {
                   <Stethoscope className="w-7 h-7" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">{doc.full_name || doc.name || 'Doctor'}</h3>
+                  <h3 className="font-bold text-slate-900 text-base">Dr. {doc.full_name || doc.name || 'Doctor'}</h3>
                   <p className="text-xs font-semibold text-teal-700 mt-0.5">{doc.specialization}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{doc.department_name || 'General Medicine'}</p>
                 </div>
@@ -226,7 +226,7 @@ export const DoctorDirectoryView: React.FC = () => {
       <Modal
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
-        title={`Book with ${selectedDoc?.full_name || selectedDoc?.name || 'Doctor'}`}
+        title={`Book with Dr. ${selectedDoc?.full_name || selectedDoc?.name || 'Doctor'}`}
         subtitle={selectedDoc?.specialization ? `${selectedDoc.specialization} · ${selectedDoc.department_name || 'General Medicine'}` : undefined}
       >
         <form onSubmit={handleBook} className="space-y-5">

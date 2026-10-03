@@ -68,7 +68,10 @@ export const updateByUserId = async (userId: number, data: UpdateDoctorInput, tr
 
 // ─── Get All Doctors (with department details) ─────────────────────────────────
 export const getAllDoctors = async (filters: { specialization?: string; name?: string } = {}) => {
-  const query = withDepartment().leftJoin('users as u', 'd.user_id', 'u.id');
+  const query = withDepartment()
+    .leftJoin('users as u', 'd.user_id', 'u.id')
+    .select('u.full_name', 'u.email', 'u.phone', 'u.role')
+    .where('u.role', 'doctor');
 
   if (filters.specialization) {
     query.where("d.specialization", "ilike", `%${filters.specialization}%`);
