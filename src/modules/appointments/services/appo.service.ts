@@ -187,8 +187,51 @@ export const createAppointment = async (user: any, body: any) => {
           });
           logger.info(`[AppointmentService] Booking confirmation email sent to ${patientUser.email} for appointment #${created.id}`);
         }
+        
+        // REQ: Notifications
+        const notificationService = await import('../../notifications/services/notification.service');
+        const patientName = patientUser?.full_name || 'Patient';
+        const doctorName = fullRecord?.doctor_name || doctor?.user?.full_name || 'Doctor';
+        const timeStr = computedStartsAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        
+        // To Reception
+        await notificationService.createNotificationForRole('receptionist', {
+          type: 'new_appointment',
+          title: 'New Appointment',
+          message: `${patientName} booked an appointment with ${doctorName} for ${appointment_date} at ${timeStr}.`,
+          entity_type: 'appointment',
+          entity_id: created.id,
+        });
+
+        // To Doctor
+        if (doctor?.user_id) {
+          await notificationService.createNotification({
+            user_id: doctor.user_id,
+            type: 'upcoming_appointment',
+            title: 'New Appointment Booked',
+            message: `${patientName} has an appointment with you on ${appointment_date} at ${timeStr}.`,
+            entity_type: 'appointment',
+            entity_id: created.id,
+          });
+        }
+        
+        // To Nurse (Notify nurses in the same department as the doctor)
+        if (deptId) {
+          const db = (await import('../../../config/db')).default;
+          const nurses = await db('nurses').where({ department_id: deptId });
+          for (const nurse of nurses) {
+            await notificationService.createNotification({
+              user_id: nurse.user_id,
+              type: 'upcoming_patient',
+              title: 'Upcoming Patient',
+              message: `${patientName} has an appointment on ${appointment_date} at ${timeStr}.`,
+              entity_type: 'appointment',
+              entity_id: created.id,
+            });
+          }
+        }
       } catch (mailErr: any) {
-        logger.error(`[AppointmentService] Failed to send booking confirmation for appointment #${created.id}: ${mailErr.message}`);
+        logger.error(`[AppointmentService] Failed to send booking confirmation or notifications for appointment #${created.id}: ${mailErr.message}`);
       }
     });
   }
@@ -468,6 +511,79 @@ export const completeAppointment = async (appointmentId: number, user: any) => {
   }
 
   return appointmentsRepo.findById(appointmentId);
+};
+
+export const checkInAppointment = async (appointmentId: number, user: any) => {
+  const appointment = await appointmentsRepo.findById(appointmentId);
+  if (!appointment) {
+    throw new appError('Appointment not found', 404);
+  }
+
+  // Idempotency: if already checked in or further along, return without error
+  if (['checked_in', 'in_progress', 'with_nurse', 'in_consultation', 'completed'].includes(appointment.status)) {
+    return appointment;
+  }
+
+  // Validate state
+  if (['cancelled', 'missed', 'no_show'].includes(appointment.status)) {
+    throw new appError(`Cannot check in a ${appointment.status} appointment.`, 422);
+  }
+
+  // Check in
+  await appointmentsRepo.updateStatus(appointmentId, 'checked_in');
+  
+  // Also update queue_status if needed
+  await db('appointments')
+    .where({ id: appointmentId })
+    .update({ queue_status: 'ready_for_vitals', updated_at: db.fn.now() });
+
+  const updatedAppt = await appointmentsRepo.findById(appointmentId);
+
+  // Send Notifications
+  setImmediate(async () => {
+    try {
+      const notificationService = await import('../../notifications/services/notification.service');
+      const patientName = updatedAppt?.patient_name || 'Patient';
+      const doctorName = updatedAppt?.doctor_name || 'Doctor';
+      const timeStr = updatedAppt?.starts_at 
+        ? new Date(updatedAppt.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        : 'scheduled time';
+
+      // To Nurse (In the same department)
+      if (updatedAppt?.department_id) {
+        const nurses = await db('nurses').where({ department_id: updatedAppt.department_id });
+        for (const nurse of nurses) {
+          await notificationService.createNotification({
+            user_id: nurse.user_id,
+            type: 'patient_arrived',
+            title: 'Patient Arrived',
+            message: `${patientName} has arrived for the appointment with ${doctorName} at ${timeStr} and is waiting for vitals.`,
+            entity_type: 'appointment',
+            entity_id: appointmentId,
+          });
+        }
+      }
+
+      // To Doctor
+      if (updatedAppt?.doctor_id) {
+         const doc = await db('doctors').where({ id: updatedAppt.doctor_id }).first();
+         if (doc?.user_id) {
+            await notificationService.createNotification({
+              user_id: doc.user_id,
+              type: 'patient_arrived',
+              title: 'Patient Arrived',
+              message: `${patientName} has checked in and is preparing for vitals.`,
+              entity_type: 'appointment',
+              entity_id: appointmentId,
+            });
+         }
+      }
+    } catch (err: any) {
+      logger.error(`[AppointmentService] Failed to send check-in notifications for appt #${appointmentId}: ${err.message}`);
+    }
+  });
+
+  return updatedAppt;
 };
 
 export const verifyAndExtractAppointmentToken = (token?: string, passedId?: number | string): number | null => {

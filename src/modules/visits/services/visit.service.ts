@@ -220,12 +220,34 @@ export const recordVitals = async (
   // 4. Save vitals and transition status → ready_for_doctor
   await visitRepo.recordVitals(visitId, vitalsData, nurseProfileId);
 
-  // 5. Stamp the linked appointment's queue_status so the queue board
-  //    reflects that vitals are done without changing the main status.
+  // 5. Stamp the linked appointment's queue_status
   if (visit.appointment_id) {
     await db('appointments')
       .where({ id: visit.appointment_id })
-      .update({ queue_status: 'vitals_completed', updated_at: db.fn.now() });
+      .update({ status: 'in_progress', queue_status: 'with_nurse', updated_at: db.fn.now() });
+      
+    // Send Notification to Doctor
+    setImmediate(async () => {
+      try {
+        const notificationService = await import('../../notifications/services/notification.service');
+        const enrichedVisit = await visitRepo.getVisitDetails(visitId);
+        if (enrichedVisit?.doctor_id) {
+           const doc = await db('doctors').where({ id: enrichedVisit.doctor_id }).first();
+           if (doc?.user_id) {
+              await notificationService.createNotification({
+                user_id: doc.user_id,
+                type: 'patient_ready',
+                title: 'Patient Ready',
+                message: `${enrichedVisit.patient_name || 'Patient'} has completed vitals and is ready for you.`,
+                entity_type: 'appointment',
+                entity_id: visit.appointment_id,
+              });
+           }
+        }
+      } catch (err: any) {
+        // Ignore notification errors
+      }
+    });
   }
 
   // Return enriched visit detail

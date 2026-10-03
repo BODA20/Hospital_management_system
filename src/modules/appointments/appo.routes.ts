@@ -69,6 +69,12 @@ appointmentsRouter.patch(
 );
 
 appointmentsRouter.patch(
+  '/:id/check-in',
+  restrictTo('admin', 'receptionist'),
+  controller.checkInAppointment,
+);
+
+appointmentsRouter.patch(
   '/:id/status',
   restrictTo('patient', 'doctor', 'admin', 'nurse'),
   validate(updateStatusSchema),

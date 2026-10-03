@@ -19,6 +19,7 @@ import { stripeWebhookRouter } from './src/modules/billing/stripe.webhook.routes
 import auditRouter from './src/modules/audit/audit.routes';
 import metricsRouter from './src/modules/metrics/metrics.routes';
 import { receptionRouter } from './src/modules/reception/reception.routes';
+import { notificationsRouter } from './src/modules/notifications/notifications.routes';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -84,6 +85,7 @@ app.use('/api/v1/shifts', shiftsRouter);
 app.use('/api/v1/audit', auditRouter);
 app.use('/api/v1/metrics', metricsRouter);
 app.use('/api/v1/reception', receptionRouter);
+app.use('/api/v1/notifications', notificationsRouter);
 
 // ─── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((_req, res) => {

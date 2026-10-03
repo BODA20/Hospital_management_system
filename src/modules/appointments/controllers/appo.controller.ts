@@ -113,6 +113,23 @@ export const completeAppointment = asyncHandler(async (req: any, res: Response) 
   });
 });
 
+export const checkInAppointment = asyncHandler(async (req: any, res: Response) => {
+  const appointmentId = Number(req.params.id);
+  const updated = await service.checkInAppointment(appointmentId, req.user);
+
+  await logAuditEvent(req, {
+    action_type: 'APPOINTMENT_STATUS_UPDATED',
+    user_id:     req.user?.id ?? null,
+    actor_name:  req.user?.full_name ?? req.user?.email ?? 'User',
+    description: `Appointment #${appointmentId} checked in by ${req.user?.role?.toUpperCase()}`,
+  });
+
+  res.json({
+    status: 'success',
+    data: updated,
+  });
+});
+
 export const publicAppointmentAction = asyncHandler(async (req: any, res: Response) => {
   const result = await service.publicAppointmentAction(req.body);
   res.json({
