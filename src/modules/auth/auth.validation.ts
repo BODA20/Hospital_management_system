@@ -5,13 +5,6 @@ export const signupSchema = z
     full_name: z.string().trim().min(2).max(100),
     email: z.string().trim().toLowerCase().email(),
     password: passwordSchema,
-    role: z
-      .preprocess(
-        (val) => (typeof val === 'string' ? val.toLowerCase() : val),
-        z.enum(['admin', 'doctor', 'nurse', 'patient', 'receptionist'])
-      )
-      .optional()
-      .default('patient'),
     phone: z
       .string()
       .trim()
