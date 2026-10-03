@@ -17,10 +17,14 @@ export const autoExpireMissedAppointments = async (scope?: {
   doctor_id?: number;
 }): Promise<number> => {
   const query = db('appointments')
-    .where('status', 'pending')
+    .whereIn('status', ['pending', 'scheduled', 'confirmed'])
+    .andWhere(function () {
+      this.whereNull('queue_status')
+        .orWhereIn('queue_status', ['scheduled', 'ready_for_vitals']);
+    })
     .andWhere(function () {
       this.whereRaw("appointment_date < (NOW() AT TIME ZONE 'Africa/Cairo')::date")
-        .orWhereRaw("ends_at < (NOW() - interval '12 hours')");
+        .orWhereRaw("ends_at < (NOW() - interval '60 minutes')");
     });
 
   // Apply scope filters BEFORE .update() so they are included in the WHERE clause
@@ -29,14 +33,14 @@ export const autoExpireMissedAppointments = async (scope?: {
 
   console.log('[AutoExpire] Running missed-appointment sweep', scope ?? '(global)');
 
-  const count = await query.update({ status: 'missed', updated_at: db.fn.now() });
+  const count = await query.update({ status: 'missed', queue_status: 'missed', updated_at: db.fn.now() });
 
   if (count > 0) {
     const msg = `[AutoExpire] ✅ Marked ${count} appointment(s) as 'missed'`;
     logger.info(msg);
     console.log(msg);
   } else {
-    console.log('[AutoExpire] No stale pending appointments found.');
+    // console.log('[AutoExpire] No stale pending appointments found.');
   }
   return count;
 };
